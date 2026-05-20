@@ -261,6 +261,76 @@ export const submissionBodySchema = z.object({
   honeypot: z.string().max(256).optional().default(""),
 });
 
+export const submissionPreflightBodySchema = z.object({
+  fields: z.record(z.string(), z.unknown()).optional().default({}),
+  honeypot: z.string().max(256).optional().default(""),
+});
+
+const submissionPreflightNoteSchema = z.object({
+  code: z.string().max(80),
+  message: z.string().max(500),
+});
+
+const submissionPreflightDuplicateSchema = z.object({
+  key: z.string().max(160),
+  category: z.string().max(80),
+  slug: z.string().max(160),
+  title: z.string().max(240),
+  url: z.string().url().max(2048),
+  reasons: z.array(z.string().max(80)).max(8),
+});
+
+const submissionPreflightSuccessResponseSchema = z.object({
+  ok: z.literal(true),
+  valid: z.boolean(),
+  routeSuggestion: z.enum(["github_issue", "fix_required", "tools_form"]),
+  category: z.string(),
+  slug: z.string(),
+  fallbackUrl: z.string().url(),
+  issuePreview: z.object({
+    title: z.string().max(300),
+    labels: z.array(z.string().max(80)).max(12),
+    body: z.string().max(32_000),
+  }),
+  schema: z.object({
+    ok: z.boolean(),
+    skipped: z.boolean(),
+    errors: z.array(z.string().max(500)).max(32),
+    warnings: z.array(z.string().max(500)).max(32),
+    fields: z.record(z.string(), z.unknown()),
+  }),
+  risk: z.object({
+    tier: z.string().optional(),
+    policyDecision: z.string().optional(),
+    policyMatrix: z.record(z.string(), z.unknown()),
+    reviewFlags: z.array(z.string().max(120)).max(32),
+    classificationWarnings: z.array(z.unknown()).max(32),
+  }),
+  expectedNotes: z.object({
+    safety: z.boolean(),
+    privacy: z.boolean(),
+    reasons: z.array(z.string().max(500)).max(8),
+  }),
+  blockers: z.array(submissionPreflightNoteSchema).max(24),
+  warnings: z.array(submissionPreflightNoteSchema).max(24),
+  duplicates: z.array(submissionPreflightDuplicateSchema).max(5),
+  nextAction: z.object({
+    label: z.string().max(160),
+    url: z.string().max(4096).optional(),
+  }),
+});
+
+const submissionPreflightDiscardResponseSchema = z.object({
+  ok: z.literal(true),
+  valid: z.literal(false),
+  queued: z.literal(false),
+});
+
+export const submissionPreflightResponseSchema = z.union([
+  submissionPreflightSuccessResponseSchema,
+  submissionPreflightDiscardResponseSchema,
+]);
+
 export const downloadQuerySchema = z.object({
   asset: z.string().trim().max(256),
 });
@@ -728,6 +798,25 @@ export const apiRouteDefinitions = {
       limit: 8,
       windowMs: 60_000,
       binding: "API_STRICT_RATE_LIMIT",
+    },
+  }),
+  "submissions.preflight": route({
+    id: "submissions.preflight",
+    method: "POST",
+    path: "/api/submissions/preflight",
+    summary: "Preflight a content submission draft",
+    description:
+      "Runs read-only schema, duplicate, source, package, and safety/privacy checks before a contributor opens a public GitHub submission issue. This endpoint never creates issues, labels, branches, pull requests, registry content, or package artifacts.",
+    tags: ["Submissions"],
+    originCheck: true,
+    bodySchema: submissionPreflightBodySchema,
+    responseSchema: submissionPreflightResponseSchema,
+    bodyLimitBytes: 64 * 1024,
+    rateLimit: {
+      scope: "submissions-preflight",
+      limit: 30,
+      windowMs: 60_000,
+      binding: "API_DYNAMIC_RATE_LIMIT",
     },
   }),
   download: route({
