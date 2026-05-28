@@ -1,17 +1,12 @@
 import { execFileSync } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
 
-import matter from "gray-matter";
+import {
+  enumerateContentVoteKeys,
+  findOrphanVoteKeys,
+} from "./lib/enumerate-content-vote-keys.mjs";
 
 const repoRoot = process.cwd();
-const contentRoot = path.join(repoRoot, "content");
 const d1Binding = process.env.SITE_D1_BINDING || "SITE_DB";
-const categories = fs
-  .readdirSync(contentRoot, { withFileTypes: true })
-  .filter((entry) => entry.isDirectory() && entry.name !== "data")
-  .map((entry) => entry.name)
-  .sort();
 
 const modeArg =
   process.argv.find((arg) => arg.startsWith("--mode=")) ?? "--mode=both";
@@ -21,21 +16,7 @@ if (!["local", "remote", "both"].includes(mode)) {
   process.exit(1);
 }
 
-const expected = new Set();
-for (const category of categories) {
-  const categoryDir = path.join(contentRoot, category);
-  const files = fs
-    .readdirSync(categoryDir)
-    .filter((fileName) => fileName.endsWith(".mdx"));
-  for (const fileName of files) {
-    const filePath = path.join(categoryDir, fileName);
-    const source = fs.readFileSync(filePath, "utf8");
-    const { data } = matter(source);
-    const slug = String(data.slug ?? fileName.replace(/\.mdx$/, ""));
-    const entryKey = `${category}:${slug}`;
-    expected.add(entryKey);
-  }
-}
+const expected = enumerateContentVoteKeys(repoRoot);
 
 function getRows(runMode) {
   const args = [
@@ -81,12 +62,15 @@ function verifyRunMode(runMode) {
     }
   }
 
+  const orphans = findOrphanVoteKeys(actual.keys(), expected);
+
   return {
     runMode,
     totalExpected: expected.size,
     totalRows: rows.length,
     missing,
     negativeCounts,
+    orphans,
   };
 }
 
@@ -99,18 +83,25 @@ for (const result of results) {
   if (
     result.missing.length > 0 ||
     result.negativeCounts.length > 0 ||
-    result.totalRows < result.totalExpected
+    result.totalRows < result.totalExpected ||
+    result.orphans.length > 0
   ) {
     failed = true;
   }
 
   console.log(
-    `${result.runMode}: expected=${result.totalExpected} rows=${result.totalRows} missing=${result.missing.length} invalidCounts=${result.negativeCounts.length}`,
+    `${result.runMode}: expected=${result.totalExpected} rows=${result.totalRows} missing=${result.missing.length} orphans=${result.orphans.length} invalidCounts=${result.negativeCounts.length}`,
   );
 
   if (result.missing.length > 0) {
     console.log("First missing rows:");
     for (const entryKey of result.missing.slice(0, 20))
+      console.log(`- ${entryKey}`);
+  }
+
+  if (result.orphans.length > 0) {
+    console.log("First orphan rows:");
+    for (const entryKey of result.orphans.slice(0, 20))
       console.log(`- ${entryKey}`);
   }
 
