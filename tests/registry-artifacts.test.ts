@@ -503,7 +503,8 @@ Use this hook after reviewing the notes.`,
     ]).entries;
     const entryJsonLd = snapshot.documents.find(
       (document) =>
-        document["@id"] === "https://heyclau.de/mcp/duplicate-jsonld#entry",
+        document["@id"] ===
+        "https://heyclau.de/entry/mcp/duplicate-jsonld#entry",
     );
 
     expect(entryJsonLd?.keywords).toBe("mcp, fixture");
@@ -642,7 +643,7 @@ Use this hook after reviewing the notes.`,
       expect(entry.sections).toBeUndefined();
       expect(entry.scriptBody).toBeUndefined();
       expect(entry.canonicalUrl).toBe(
-        `https://heyclau.de/${entry.category}/${entry.slug}`,
+        `https://heyclau.de/entry/${entry.category}/${entry.slug}`,
       );
       expect(entry.llmsUrl).toBe(
         `https://heyclau.de/data/llms/${entry.category}/${entry.slug}.txt`,
@@ -783,7 +784,7 @@ Use this hook after reviewing the notes.`,
         copyText,
       });
       expect(raycastFeedEntry.canonicalUrl).toBe(
-        `https://heyclau.de/${entry.category}/${entry.slug}`,
+        `https://heyclau.de/entry/${entry.category}/${entry.slug}`,
       );
       expect(raycastFeedEntry.llmsUrl).toBe(
         `https://heyclau.de/data/llms/${entry.category}/${entry.slug}.txt`,

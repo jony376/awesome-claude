@@ -196,7 +196,11 @@ export function dataUrl(...segments) {
 }
 
 function entryCanonicalUrl(entry, siteUrl = SITE_URL) {
-  return `${siteUrl.replace(/\/$/, "")}/${entry.category}/${entry.slug}`;
+  return `${siteUrl.replace(/\/$/, "")}/entry/${entry.category}/${entry.slug}`;
+}
+
+function categoryCanonicalUrl(category, siteUrl = SITE_URL) {
+  return `${siteUrl.replace(/\/$/, "")}/browse?category=${encodeURIComponent(category)}`;
 }
 
 function entryLlmsUrl(entry, siteUrl = SITE_URL) {
@@ -642,9 +646,7 @@ export function buildCursorSkillAdapter(entry) {
     ? entry.downloadUrl.startsWith("/")
       ? `${SITE_URL}${entry.downloadUrl}`
       : entry.downloadUrl
-    : entry.repoUrl ||
-      entry.documentationUrl ||
-      `${SITE_URL}/skills/${entry.slug}`;
+    : entry.repoUrl || entry.documentationUrl || entryCanonicalUrl(entry);
 
   return [
     "---",
@@ -785,7 +787,7 @@ export function buildReadOnlyEcosystemFeed(entries, params = {}) {
         slug: entry.slug,
         title: entry.title,
         description: entry.cardDescription || entry.description,
-        url: `${siteUrl.replace(/\/$/, "")}/${entry.category}/${entry.slug}`,
+        url: entryCanonicalUrl(entry, siteUrl),
         ...buildEntryProvenanceFields(entry),
         ...buildEntryBrandFields(entry),
         websiteUrl: entry.websiteUrl || "",
@@ -848,7 +850,7 @@ export function buildMcpRegistryFeed(entries) {
         : undefined,
       installCommand: entry.installCommand || "",
       configSnippet: entry.configSnippet || "",
-      heyclaudeUrl: `${SITE_URL}/${entry.category}/${entry.slug}`,
+      heyclaudeUrl: entryCanonicalUrl(entry),
     })),
   };
 }
@@ -868,7 +870,7 @@ export function buildPluginExportFeed(entries) {
     installCommand: entry.installCommand || entry.commandSyntax || "",
     platformCompatibility:
       entry.category === "skills" ? buildSkillPlatformCompatibility(entry) : [],
-    heyclaudeUrl: `${SITE_URL}/${entry.category}/${entry.slug}`,
+    heyclaudeUrl: entryCanonicalUrl(entry),
   }));
 
   return {
@@ -959,7 +961,7 @@ export function buildCategoryDistributionFeed(entries, category, params = {}) {
     count: categoryEntries.length,
     entries: buildDirectoryEntries(categoryEntries).map((entry) => ({
       ...entry,
-      canonicalUrl: `${siteUrl.replace(/\/$/, "")}/${entry.category}/${entry.slug}`,
+      canonicalUrl: entryCanonicalUrl(entry, siteUrl),
     })),
   };
 }
@@ -981,7 +983,7 @@ export function buildPlatformDistributionFeed(entries, platform, params = {}) {
     count: platformEntries.length,
     entries: buildDirectoryEntries(platformEntries).map((entry) => ({
       ...entry,
-      canonicalUrl: `${siteUrl.replace(/\/$/, "")}/${entry.category}/${entry.slug}`,
+      canonicalUrl: entryCanonicalUrl(entry, siteUrl),
     })),
   };
 }
@@ -996,7 +998,7 @@ export function buildDistributionFeedIndex(entries, params = {}) {
       label: spec?.label ?? category,
       count,
       feedUrl: dataUrl("feeds", "categories", `${category}.json`),
-      canonicalUrl: `${siteUrl.replace(/\/$/, "")}/${category}`,
+      canonicalUrl: categoryCanonicalUrl(category, siteUrl),
     };
   });
   const platforms = [

@@ -1,5 +1,3 @@
-import "server-only";
-
 import { cache } from "react";
 
 import { getDirectoryEntries, type DirectoryEntry } from "@/lib/content";
@@ -26,9 +24,7 @@ export const getContributors = cache(async () => {
   const grouped = new Map<string, ContributorSummary>();
 
   for (const entry of entries) {
-    const name = String(
-      entry.submittedBy || entry.author || "JSONbored",
-    ).trim();
+    const name = String(entry.submittedBy || entry.author || "JSONbored").trim();
     if (!name) continue;
     const slug = contributorSlug(name);
     if (!slug) continue;
@@ -47,8 +43,7 @@ export const getContributors = cache(async () => {
   }
 
   return [...grouped.values()].sort(
-    (left, right) =>
-      right.entryCount - left.entryCount || left.name.localeCompare(right.name),
+    (left, right) => right.entryCount - left.entryCount || left.name.localeCompare(right.name),
   );
 });
 
