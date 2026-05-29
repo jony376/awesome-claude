@@ -1,5 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { normalizeCategory, parseIssueFormBody, slugify } from "@heyclaude/registry/submission";
+import { createApiFileRoute } from "@/lib/api/file-route";
+import {
+  normalizeCategory,
+  looksLikeSubmissionIssue,
+  parseIssueFormBody,
+  slugify,
+  submissionActivityState,
+} from "@heyclaude/registry/submission";
 
 import { submissionQueueQuerySchema } from "@/lib/api/contracts";
 import { apiError, apiJson, createApiHandler, type InferApiQuery } from "@/lib/api/router";
@@ -33,6 +39,21 @@ type GitHubIssue = {
 
 type GitHubComment = {
   body?: string | null;
+  created_at?: string;
+  createdAt?: string;
+  user?: {
+    login?: string;
+  } | null;
+  author?: {
+    login?: string;
+  } | null;
+};
+
+type GitHubTimelineEvent = {
+  event?: string;
+  created_at?: string;
+  createdAt?: string;
+  changes?: Record<string, unknown>;
 };
 
 function envValue(env: Record<string, unknown>, names: string[]) {
@@ -133,27 +154,95 @@ async function fetchGitHub<T>(url: string, token: string) {
   return { response, payload };
 }
 
-async function fetchIssueCommentsImportPr(issue: GitHubIssue, token: string) {
-  if (!issue.comments_url) return undefined;
-  const { response, payload } = await fetchGitHub<GitHubComment[]>(issue.comments_url, token);
-  if (!response.ok || !Array.isArray(payload)) return undefined;
-  for (const comment of [...payload].reverse()) {
+function withPerPage(url: string) {
+  const parsed = new URL(url);
+  if (!parsed.searchParams.has("per_page")) {
+    parsed.searchParams.set("per_page", "100");
+  }
+  return parsed.toString();
+}
+
+function nextPageUrl(response: Response) {
+  const link = response.headers.get("link");
+  if (!link) return "";
+  const match = link.match(/<([^>]+)>;\s*rel="next"/);
+  return match?.[1] || "";
+}
+
+async function fetchGitHubPages<T>(url: string, token: string) {
+  const items: T[] = [];
+  let nextUrl = withPerPage(url);
+
+  for (let page = 0; page < 10 && nextUrl; page += 1) {
+    const { response, payload } = await fetchGitHub<T[]>(nextUrl, token);
+    if (!response.ok || !Array.isArray(payload)) return items;
+    items.push(...payload);
+    nextUrl = nextPageUrl(response);
+  }
+
+  return items;
+}
+
+async function fetchIssueComments(issue: GitHubIssue, token: string) {
+  if (!issue.comments_url) return [];
+  try {
+    return await fetchGitHubPages<GitHubComment>(issue.comments_url, token);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchIssueTimeline(repo: string, issueNumber: number, token: string) {
+  try {
+    return await fetchGitHubPages<GitHubTimelineEvent>(
+      `https://api.github.com/repos/${repo}/issues/${issueNumber}/timeline`,
+      token,
+    );
+  } catch {
+    return [];
+  }
+}
+
+function commentImportPr(comments: GitHubComment[]) {
+  for (const comment of [...comments].reverse()) {
     const url = importPrFromText(String(comment.body || ""));
     if (url) return url;
   }
   return undefined;
 }
 
-async function mapIssue(issue: GitHubIssue, token: string) {
+function activityIssue(
+  issue: GitHubIssue,
+  comments: GitHubComment[],
+  timeline: GitHubTimelineEvent[],
+) {
+  return {
+    body: issue.body || "",
+    createdAt: issue.created_at,
+    updatedAt: issue.updated_at,
+    author: issue.user?.login || "",
+    comments,
+    timeline,
+  };
+}
+
+async function mapIssue(issue: GitHubIssue, repo: string, token: string) {
   const labels = labelNames(issue);
   const fields = parseIssueFormBody(issue.body || "");
   const status = statusFor(issue, labels);
+  const [comments, timeline] = await Promise.all([
+    fetchIssueComments(issue, token),
+    fetchIssueTimeline(repo, issue.number, token),
+  ]);
+  const activity = submissionActivityState(activityIssue(issue, comments, timeline));
   const bodyImportPrUrl = importPrFromText(issue.body || "");
   const importPrUrl =
     bodyImportPrUrl ||
-    (status === "import_pr_open" || status === "imported"
-      ? await fetchIssueCommentsImportPr(issue, token)
-      : undefined);
+    (status === "import_pr_open" || status === "imported" ? commentImportPr(comments) : undefined);
+  const blockers = blockersFor(labels);
+  if (activity.authorCommentedWithoutBodyUpdate) {
+    blockers.push("Author replied after review, but the issue body was not updated.");
+  }
 
   return {
     number: issue.number,
@@ -166,8 +255,13 @@ async function mapIssue(issue: GitHubIssue, token: string) {
     status,
     state: issue.state,
     labels,
-    blockers: blockersFor(labels),
+    blockers,
     updatedAt: issue.updated_at,
+    bodyFingerprint: activity.bodyFingerprint,
+    bodyUpdatedAt: activity.bodyUpdatedAt,
+    authorCommentedAfterReview: activity.authorCommentedAfterReview,
+    authorCommentedWithoutBodyUpdate: activity.authorCommentedWithoutBodyUpdate,
+    lastAuthorCommentAt: activity.lastAuthorCommentAt,
     createdAt: issue.created_at,
     closedAt: issue.closed_at ?? null,
     ...(importPrUrl ? { importPrUrl } : {}),
@@ -195,7 +289,7 @@ async function listIssues(params: { repo: string; token: string; limit: number }
     ok: true as const,
     status: response.status,
     token: params.token,
-    issues: payload.filter((issue) => !issue.pull_request),
+    issues: payload.filter((issue) => !issue.pull_request && looksLikeSubmissionIssue(issue)),
   };
 }
 
@@ -213,7 +307,7 @@ async function getIssue(params: { repo: string; token: string; number: number })
     };
   }
   const labels = labelNames(payload);
-  if (!hasLabel(labels, "content-submission")) {
+  if (!hasLabel(labels, "content-submission") || !looksLikeSubmissionIssue(payload)) {
     return {
       ok: false as const,
       status: 404,
@@ -264,7 +358,7 @@ export const GET = createApiHandler("submissions.queue", async ({ request, query
   const issues = "issue" in result ? [result.issue] : result.issues;
   const entries = [];
   for (const issue of issues) {
-    if (issue) entries.push(await mapIssue(issue, result.token));
+    if (issue) entries.push(await mapIssue(issue, repo, result.token));
   }
 
   return apiJson(
@@ -279,8 +373,7 @@ export const GET = createApiHandler("submissions.queue", async ({ request, query
   );
 });
 
-// @ts-ignore Generated API route is added to routeTree during Vite build.
-export const Route = createFileRoute("/api/submissions/queue")({
+export const Route = createApiFileRoute("/api/submissions/queue")({
   server: {
     handlers: {
       GET: async ({ request, params }) => GET(request, { params }),
