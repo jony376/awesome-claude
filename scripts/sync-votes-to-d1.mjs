@@ -94,7 +94,9 @@ function applyMode(runMode) {
   const pruneTableKeys = (tableName, keys) => {
     for (let index = 0; index < keys.length; index += chunkSize) {
       const chunk = keys.slice(index, index + chunkSize);
-      const inList = chunk.map((key) => `'${key.replaceAll("'", "''")}'`).join(", ");
+      const inList = chunk
+        .map((key) => `'${key.replaceAll("'", "''")}'`)
+        .join(", ");
       runWrangler([
         "d1",
         "execute",
