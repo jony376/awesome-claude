@@ -18,7 +18,7 @@ if (!["local", "remote", "both"].includes(mode)) {
 
 const expected = enumerateContentVoteKeys(repoRoot);
 
-function getRows(runMode) {
+function getRows(runMode, query) {
   const args = [
     "--filter",
     "web",
@@ -29,7 +29,7 @@ function getRows(runMode) {
     d1Binding,
     runMode === "remote" ? "--remote" : "--local",
     "--command",
-    "SELECT entry_key, upvote_count FROM votes_entries;",
+    query,
   ];
   const output = execFileSync("pnpm", args, {
     cwd: repoRoot,
@@ -44,10 +44,18 @@ function getRows(runMode) {
 }
 
 function verifyRunMode(runMode) {
-  const rows = getRows(runMode);
+  const rows = getRows(
+    runMode,
+    "SELECT entry_key, upvote_count FROM votes_entries;",
+  );
+  const clientRows = getRows(
+    runMode,
+    "SELECT DISTINCT entry_key FROM votes_by_client;",
+  );
   const actual = new Map(
     rows.map((row) => [String(row.entry_key), Number(row.upvote_count ?? 0)]),
   );
+  const clientKeys = clientRows.map((row) => String(row.entry_key));
 
   const missing = [];
   const negativeCounts = [];
@@ -63,14 +71,17 @@ function verifyRunMode(runMode) {
   }
 
   const orphans = findOrphanVoteKeys(actual.keys(), expected);
+  const clientOrphans = findOrphanVoteKeys(clientKeys, expected);
 
   return {
     runMode,
     totalExpected: expected.size,
     totalRows: rows.length,
+    totalClientRows: clientRows.length,
     missing,
     negativeCounts,
     orphans,
+    clientOrphans,
   };
 }
 
@@ -84,13 +95,14 @@ for (const result of results) {
     result.missing.length > 0 ||
     result.negativeCounts.length > 0 ||
     result.totalRows < result.totalExpected ||
-    result.orphans.length > 0
+    result.orphans.length > 0 ||
+    result.clientOrphans.length > 0
   ) {
     failed = true;
   }
 
   console.log(
-    `${result.runMode}: expected=${result.totalExpected} rows=${result.totalRows} missing=${result.missing.length} orphans=${result.orphans.length} invalidCounts=${result.negativeCounts.length}`,
+    `${result.runMode}: expected=${result.totalExpected} rows=${result.totalRows} clientRows=${result.totalClientRows} missing=${result.missing.length} orphans=${result.orphans.length} clientOrphans=${result.clientOrphans.length} invalidCounts=${result.negativeCounts.length}`,
   );
 
   if (result.missing.length > 0) {
@@ -102,6 +114,12 @@ for (const result of results) {
   if (result.orphans.length > 0) {
     console.log("First orphan rows:");
     for (const entryKey of result.orphans.slice(0, 20))
+      console.log(`- ${entryKey}`);
+  }
+
+  if (result.clientOrphans.length > 0) {
+    console.log("First orphan client-vote rows:");
+    for (const entryKey of result.clientOrphans.slice(0, 20))
       console.log(`- ${entryKey}`);
   }
 

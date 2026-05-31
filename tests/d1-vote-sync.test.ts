@@ -22,4 +22,20 @@ describe("d1 vote key helpers", () => {
       expect(key).toMatch(/^[a-z0-9-]+:[a-z0-9-]+$/);
     }
   });
+
+  it("flags orphan votes_by_client entry keys after slug rename", () => {
+    const expectedAfterRename = new Set(["skills:new-slug"]);
+    const clientVoteKeys = ["skills:old-slug", "skills:new-slug"];
+    expect(findOrphanVoteKeys(clientVoteKeys, expectedAfterRename)).toEqual([
+      "skills:old-slug",
+    ]);
+  });
+
+  it("flags orphan votes_by_client entry keys after entry deletion", () => {
+    const expectedAfterDelete = new Set(["mcp:kept-entry"]);
+    const clientVoteKeys = ["mcp:deleted-entry", "mcp:kept-entry"];
+    expect(findOrphanVoteKeys(clientVoteKeys, expectedAfterDelete)).toEqual([
+      "mcp:deleted-entry",
+    ]);
+  });
 });

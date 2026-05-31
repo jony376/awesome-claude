@@ -43,7 +43,7 @@ function runWrangler(args) {
   });
 }
 
-function getVoteEntryKeys(runMode) {
+function getVoteEntryKeys(runMode, tableName) {
   const output = execFileSync(
     "pnpm",
     [
@@ -56,7 +56,7 @@ function getVoteEntryKeys(runMode) {
       d1Binding,
       runMode === "remote" ? "--remote" : "--local",
       "--command",
-      "SELECT entry_key FROM votes_entries;",
+      `SELECT entry_key FROM ${tableName};`,
     ],
     { cwd: repoRoot, encoding: "utf8" },
   );
@@ -86,28 +86,47 @@ function applyMode(runMode) {
     return;
   }
 
-  const actualKeys = getVoteEntryKeys(runMode);
-  const orphans = actualKeys.filter((key) => !expected.has(key));
-  if (orphans.length === 0) {
+  const actualEntryKeys = getVoteEntryKeys(runMode, "votes_entries");
+  const actualClientKeys = getVoteEntryKeys(runMode, "votes_by_client");
+  const entryOrphans = actualEntryKeys.filter((key) => !expected.has(key));
+  const clientOrphans = actualClientKeys.filter((key) => !expected.has(key));
+
+  const pruneTableKeys = (tableName, keys) => {
+    for (let index = 0; index < keys.length; index += chunkSize) {
+      const chunk = keys.slice(index, index + chunkSize);
+      const inList = chunk.map((key) => `'${key.replaceAll("'", "''")}'`).join(", ");
+      runWrangler([
+        "d1",
+        "execute",
+        d1Binding,
+        runMode === "remote" ? "--remote" : "--local",
+        "--command",
+        `DELETE FROM ${tableName} WHERE entry_key IN (${inList});`,
+      ]);
+    }
+  };
+
+  if (entryOrphans.length === 0 && clientOrphans.length === 0) {
     console.log(`${runMode}: no orphan vote rows to prune`);
     return;
   }
 
-  for (let index = 0; index < orphans.length; index += chunkSize) {
-    const chunk = orphans.slice(index, index + chunkSize);
-    const inList = chunk
-      .map((key) => `'${key.replaceAll("'", "''")}'`)
-      .join(", ");
-    runWrangler([
-      "d1",
-      "execute",
-      d1Binding,
-      runMode === "remote" ? "--remote" : "--local",
-      "--command",
-      `DELETE FROM votes_entries WHERE entry_key IN (${inList});`,
-    ]);
-  }
-  console.log(`${runMode}: pruned ${orphans.length} orphan vote row(s)`);
+  pruneTableKeys("votes_entries", entryOrphans);
+  pruneTableKeys("votes_by_client", clientOrphans);
+
+  // Defensive reconciliation in case a stale client vote points to a missing entry key.
+  runWrangler([
+    "d1",
+    "execute",
+    d1Binding,
+    runMode === "remote" ? "--remote" : "--local",
+    "--command",
+    "DELETE FROM votes_by_client WHERE entry_key NOT IN (SELECT entry_key FROM votes_entries);",
+  ]);
+
+  console.log(
+    `${runMode}: pruned ${entryOrphans.length} orphan votes_entries row(s) and ${clientOrphans.length} orphan votes_by_client row(s)`,
+  );
 }
 
 if (mode === "local" || mode === "both") applyMode("local");
