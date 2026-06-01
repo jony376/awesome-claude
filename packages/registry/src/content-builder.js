@@ -21,6 +21,13 @@ const UNSAFE_FRONTMATTER_LANGUAGE_ERROR =
 // submission-risk.js and scripts/ci/validate-content-policy.mjs (see #612).
 const SAFE_MATTER_OPTIONS = {
   engines: {
+    /**
+     * gray-matter engine override for `---js` frontmatter. Throws instead of
+     * evaluating the block, so untrusted MDX cannot execute code during index
+     * builds.
+     *
+     * @returns {never} Always throws {@link UNSAFE_FRONTMATTER_LANGUAGE_ERROR}.
+     */
     javascript() {
       throw new Error(UNSAFE_FRONTMATTER_LANGUAGE_ERROR);
     },
@@ -213,6 +220,25 @@ function normalizePlatformCompatibility(value, data, inferred) {
   return buildDefaultSkillPlatformCompatibility(data, inferred);
 }
 
+/**
+ * Build a normalized content-registry entry from a single MDX source string.
+ *
+ * Frontmatter is parsed with {@link SAFE_MATTER_OPTIONS}, so executable `---js`
+ * frontmatter is rejected (never evaluated) while YAML frontmatter is unchanged.
+ * The Markdown body, headings, code blocks, sections, SEO fields, provenance,
+ * and platform/download metadata are derived from `params`.
+ *
+ * @param {object} params Source content and build context.
+ * @param {string} params.category Content category (e.g. `"hooks"`, `"mcp"`).
+ * @param {string} params.fileName Source file name; used to derive the slug/title.
+ * @param {string} params.filePath Absolute path to the source file.
+ * @param {string} params.source Raw MDX file contents (frontmatter + body).
+ * @param {string} params.repoRoot Repository root, used to build source URLs.
+ * @param {string} params.contentRoot Content root, used to resolve local downloads.
+ * @param {string} [params.contentUpdatedAt] ISO timestamp of the last content change.
+ * @param {Function} [params.getLocalDownloadSha256] Resolver for a local download's SHA-256.
+ * @returns {object} The normalized content entry.
+ */
 export function buildContentEntryFromMdx(params) {
   const {
     category,
