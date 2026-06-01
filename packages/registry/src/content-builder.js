@@ -34,6 +34,16 @@ const SAFE_MATTER_OPTIONS = {
   engines: { javascript: rejectJavascriptFrontmatter },
 };
 
+/**
+ * Default `getLocalDownloadSha256` resolver for {@link buildContentEntryFromMdx}:
+ * returns `null` when the caller does not supply a local-download hash lookup.
+ *
+ * @returns {null} Always `null` (no local hash available).
+ */
+function defaultLocalDownloadSha256() {
+  return null;
+}
+
 export const DEFAULT_DIRECTORY_REPO_URL =
   "https://github.com/JSONbored/awesome-claude";
 
@@ -248,7 +258,7 @@ export function buildContentEntryFromMdx(params) {
     repoRoot,
     contentRoot,
     contentUpdatedAt,
-    getLocalDownloadSha256 = () => null,
+    getLocalDownloadSha256 = defaultLocalDownloadSha256,
   } = params;
   const { data, content } = matter(source, SAFE_MATTER_OPTIONS);
   const body = normalizeBody(content, category);
