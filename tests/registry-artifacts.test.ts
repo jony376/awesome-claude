@@ -616,6 +616,37 @@ Use this hook after reviewing the notes.`,
     expect(renderEntryLlms(entry)).toContain("## Privacy Notes");
   });
 
+  it("rejects executable JavaScript frontmatter without running it", () => {
+    const tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "heyclaude-content-builder-"),
+    );
+    const markerPath = path.join(tmpDir, "js-frontmatter-executed");
+    const escapedMarkerPath = JSON.stringify(markerPath);
+
+    expect(() =>
+      buildContentEntryFromMdx({
+        category: "mcp",
+        fileName: "executable-frontmatter-mcp.mdx",
+        filePath: path.join(repoRoot, "content/mcp/executable-frontmatter-mcp.mdx"),
+        repoRoot,
+        contentRoot: path.join(repoRoot, "content"),
+        source: `---js
+require("node:fs").writeFileSync(${escapedMarkerPath}, "executed");
+module.exports = {
+  title: "Executable Frontmatter MCP",
+  slug: "executable-frontmatter-mcp",
+  category: "mcp",
+  description: "MCP server with executable frontmatter.",
+  cardDescription: "Executable frontmatter fixture.",
+};
+---
+Executable frontmatter should be rejected without being evaluated.`,
+      }),
+    ).toThrow(/JavaScript frontmatter is not allowed/);
+
+    expect(fs.existsSync(markerPath)).toBe(false);
+  });
+
   it("deduplicates repeated JSON-LD values while preserving order", () => {
     const [snapshot] = buildJsonLdSnapshots([
       {

@@ -13,6 +13,20 @@ import {
 } from "./content-schema.js";
 import { buildBrandAssetMetadata } from "./brand-assets.js";
 
+const UNSAFE_FRONTMATTER_LANGUAGE_ERROR =
+  "Executable JavaScript frontmatter is not allowed in content entries";
+
+// Disable gray-matter's executable JavaScript frontmatter engine so untrusted
+// `.mdx` content cannot run code during index builds. Mirrors the hardening in
+// submission-risk.js and scripts/ci/validate-content-policy.mjs (see #612).
+const SAFE_MATTER_OPTIONS = {
+  engines: {
+    javascript() {
+      throw new Error(UNSAFE_FRONTMATTER_LANGUAGE_ERROR);
+    },
+  },
+};
+
 export const DEFAULT_DIRECTORY_REPO_URL =
   "https://github.com/JSONbored/awesome-claude";
 
@@ -210,7 +224,7 @@ export function buildContentEntryFromMdx(params) {
     contentUpdatedAt,
     getLocalDownloadSha256 = () => null,
   } = params;
-  const { data, content } = matter(source);
+  const { data, content } = matter(source, SAFE_MATTER_OPTIONS);
   const body = normalizeBody(content, category);
   const headings = extractHeadings(body);
   const codeBlocks = extractCodeBlocks(body);
