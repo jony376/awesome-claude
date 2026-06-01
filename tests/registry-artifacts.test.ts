@@ -616,7 +616,14 @@ Use this hook after reviewing the notes.`,
     expect(renderEntryLlms(entry)).toContain("## Privacy Notes");
   });
 
-  it("rejects executable JavaScript frontmatter without running it", () => {
+  /**
+   * Regression for the safe-frontmatter hardening: `buildContentEntryFromMdx`
+   * must reject executable `---js` frontmatter without evaluating it. The
+   * fixture's frontmatter would write a marker file as a side effect, so this
+   * asserts both that the call throws and that the marker was never created —
+   * proving the JavaScript engine never ran.
+   */
+  function expectExecutableFrontmatterRejected() {
     const tmpDir = fs.mkdtempSync(
       path.join(os.tmpdir(), "heyclaude-content-builder-"),
     );
@@ -645,7 +652,12 @@ Executable frontmatter should be rejected without being evaluated.`,
     ).toThrow(/JavaScript frontmatter is not allowed/);
 
     expect(fs.existsSync(markerPath)).toBe(false);
-  });
+  }
+
+  it(
+    "rejects executable JavaScript frontmatter without running it",
+    expectExecutableFrontmatterRejected,
+  );
 
   it("deduplicates repeated JSON-LD values while preserving order", () => {
     const [snapshot] = buildJsonLdSnapshots([
