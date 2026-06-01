@@ -630,7 +630,8 @@ Use this hook after reviewing the notes.`,
     const markerPath = path.join(tmpDir, "js-frontmatter-executed");
     const escapedMarkerPath = JSON.stringify(markerPath);
 
-    expect(() =>
+    let thrownError: unknown;
+    try {
       buildContentEntryFromMdx({
         category: "mcp",
         fileName: "executable-frontmatter-mcp.mdx",
@@ -648,9 +649,15 @@ module.exports = {
 };
 ---
 Executable frontmatter should be rejected without being evaluated.`,
-      }),
-    ).toThrow(/JavaScript frontmatter is not allowed/);
+      });
+    } catch (error) {
+      thrownError = error;
+    }
 
+    expect(thrownError).toBeInstanceOf(Error);
+    expect((thrownError as Error).message).toMatch(
+      /JavaScript frontmatter is not allowed/,
+    );
     expect(fs.existsSync(markerPath)).toBe(false);
   }
 
