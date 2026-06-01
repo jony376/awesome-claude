@@ -16,22 +16,22 @@ import { buildBrandAssetMetadata } from "./brand-assets.js";
 const UNSAFE_FRONTMATTER_LANGUAGE_ERROR =
   "Executable JavaScript frontmatter is not allowed in content entries";
 
+/**
+ * gray-matter engine override for `---js` frontmatter. Throws instead of
+ * evaluating the block, so untrusted `.mdx` content cannot execute code during
+ * index builds. Mirrors the hardening in submission-risk.js and
+ * scripts/ci/validate-content-policy.mjs (see #612).
+ *
+ * @returns {never} Always throws {@link UNSAFE_FRONTMATTER_LANGUAGE_ERROR}.
+ */
+function rejectJavascriptFrontmatter() {
+  throw new Error(UNSAFE_FRONTMATTER_LANGUAGE_ERROR);
+}
+
 // Disable gray-matter's executable JavaScript frontmatter engine so untrusted
-// `.mdx` content cannot run code during index builds. Mirrors the hardening in
-// submission-risk.js and scripts/ci/validate-content-policy.mjs (see #612).
+// `.mdx` content cannot run code during index builds.
 const SAFE_MATTER_OPTIONS = {
-  engines: {
-    /**
-     * gray-matter engine override for `---js` frontmatter. Throws instead of
-     * evaluating the block, so untrusted MDX cannot execute code during index
-     * builds.
-     *
-     * @returns {never} Always throws {@link UNSAFE_FRONTMATTER_LANGUAGE_ERROR}.
-     */
-    javascript() {
-      throw new Error(UNSAFE_FRONTMATTER_LANGUAGE_ERROR);
-    },
-  },
+  engines: { javascript: rejectJavascriptFrontmatter },
 };
 
 export const DEFAULT_DIRECTORY_REPO_URL =
