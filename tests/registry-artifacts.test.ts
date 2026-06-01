@@ -51,6 +51,11 @@ const sharedTmpHookLogPathPattern =
 const nonPredictableTmpHookLogPathPattern =
   /\$\$|\$RANDOM|\$\{RANDOM\}|X{3,}/i;
 
+/**
+ * Scan a hook script body for shared, predictable `/tmp` log paths: matches of
+ * the debug/startup log pattern that lack an unpredictable component (`$$`,
+ * `$RANDOM`, `XXX…`). Returns the de-duplicated list of offending paths.
+ */
 function findPredictableSharedTmpHookLogPaths(scriptBody: string) {
   const paths = new Set<string>();
   for (const match of scriptBody.matchAll(sharedTmpHookLogPathPattern)) {
@@ -1103,6 +1108,10 @@ type SourceHealthFixture = {
   privacyNotes?: unknown;
 };
 
+/**
+ * Build a source-health test fixture entry from `input`, deriving the
+ * `title` as `"<category>:<slug>"` and spreading the remaining fields through.
+ */
 function healthEntry(input: SourceHealthFixture) {
   return { title: `${input.category}:${input.slug}`, ...input };
 }
