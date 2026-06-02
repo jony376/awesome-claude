@@ -36,6 +36,12 @@ The current PR artifact check uses that shared `heyclaude-dev` Worker when the
 workflow has Cloudflare credentials. This is branch validation, not a permanent
 per-PR environment. If Cloudflare Git previews publish a GitHub Deployment
 environment URL, CI resolves and validates that URL instead.
+For same-repo deployable PRs, missing preview deployment credentials or a missing
+resolved preview URL must fail `validate-pr-preview`.
+
+The private submission gate is production-only. The single live Worker is
+`heyclaude-submission-gate` at `submission-gate.heyclau.de`; dev and production
+website builds both call that same gate.
 
 Do not run production deploy commands from feature branches. Production updates
 must flow through the protected `main` branch.

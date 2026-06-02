@@ -1,0 +1,86 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "heyclaude-submission-gate",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+      "head_sampling_rate": 0.1,
+    },
+  },
+  "placement": {
+    "mode": "smart",
+  },
+  "vars": {
+    "PUBLIC_SITE_URL": "https://heyclau.de",
+    "SUBMISSION_GATE_URL": "https://submission-gate.heyclau.de",
+    "PUBLIC_REPO": "JSONbored/awesome-claude",
+    "ALLOWED_CORS_ORIGINS": "https://heyclau.de",
+    "PILOT_BASE_REF": "main",
+    "GITHUB_API_VERSION": "2022-11-28",
+    "REVIEW_MARKER": "<!-- heyclaude-submission-gate -->",
+    "REQUIRED_VALIDATION_CHECKS": "validate-content,Superagent Security Scan",
+    "REQUIRED_STATUS_CONTEXTS": "",
+  },
+  "routes": [
+    {
+      "pattern": "submission-gate.heyclau.de",
+      "custom_domain": true,
+    },
+  ],
+  "d1_databases": [
+    {
+      "binding": "SUBMISSION_GATE_DB",
+      "database_name": "heyclaude-submission-gate",
+      "database_id": "3fc13755-7445-49db-b703-9012ce870cb7",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "SUBMISSION_GATE_AUDIT",
+      "bucket_name": "heyclaude-submission-gate-audit",
+      "preview_bucket_name": "heyclaude-submission-gate-audit-preview",
+    },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "SUBMISSION_REVIEW_QUEUE",
+        "queue": "heyclaude-submission-review",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "heyclaude-submission-review",
+        "max_batch_size": 1,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "heyclaude-submission-review-dlq",
+        "max_concurrency": 5,
+      },
+    ],
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SUBMISSION_LOCK",
+        "class_name": "SubmissionLock",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SubmissionLock", "SubmissionImportRunner"],
+    },
+    {
+      "tag": "v2",
+      "deleted_classes": ["SubmissionImportRunner"],
+    },
+  ],
+}

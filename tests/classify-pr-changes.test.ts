@@ -43,7 +43,11 @@ function createFixtureRepo() {
   };
 }
 
-function runClassifier(cwd: string, baseSha: string) {
+function runClassifier(
+  cwd: string,
+  baseSha: string,
+  extraEnv: Record<string, string> = {},
+) {
   const outputPath = path.join(cwd, "github-output.txt");
   execFileSync(
     "node",
@@ -52,6 +56,9 @@ function runClassifier(cwd: string, baseSha: string) {
       cwd,
       env: {
         ...process.env,
+        GITHUB_HEAD_REF: "contributor/source-entry",
+        HEAD_REF: "contributor/source-entry",
+        ...extraEnv,
         BASE_SHA: baseSha,
         GITHUB_EVENT_NAME: "pull_request",
         GITHUB_OUTPUT: outputPath,
@@ -70,7 +77,7 @@ describe("PR change classifier", () => {
     }
   });
 
-  it("routes content entry changes through public artifact validation lanes", () => {
+  it("routes direct content entry PRs through the focused submission lane", () => {
     const { cwd, baseSha } = createFixtureRepo();
 
     const contentDir = path.join(cwd, "content", "agents");
@@ -86,21 +93,46 @@ describe("PR change classifier", () => {
     expect(outputs).toMatchObject({
       content: "true",
       content_agents: "true",
-      registry: "true",
-      raycast: "true",
-      web: "true",
+      direct_submission: "true",
+      source_content_only: "true",
+      readme_only: "false",
+      registry: "false",
+      raycast: "false",
+      web: "false",
     });
   });
 
-  it("routes submission automation changes through full owned validation lanes", () => {
+  it("routes README-only refresh PRs through registry contract validation without content review", () => {
+    const { cwd, baseSha } = createFixtureRepo();
+
+    fs.writeFileSync(path.join(cwd, "README.md"), "# refreshed\n");
+    git(cwd, ["add", "README.md"]);
+    git(cwd, ["commit", "-m", "refresh readme"]);
+
+    const outputs = runClassifier(cwd, baseSha, {
+      GITHUB_HEAD_REF: "automation/readme-refresh",
+    });
+    expect(outputs).toMatchObject({
+      readme_only: "true",
+      direct_submission: "false",
+      source_content_only: "false",
+      content: "false",
+      registry: "true",
+      docs: "true",
+      web: "false",
+      raycast: "false",
+    });
+  });
+
+  it("routes direct PR submission automation changes through full owned validation lanes", () => {
     const { cwd, baseSha } = createFixtureRepo();
     const scriptDir = path.join(cwd, "scripts");
     fs.mkdirSync(scriptDir, { recursive: true });
     fs.writeFileSync(
-      path.join(scriptDir, "import-submission-issue.mjs"),
+      path.join(scriptDir, "analyze-submission-risk.mjs"),
       "console.log('changed');\n",
     );
-    git(cwd, ["add", "scripts/import-submission-issue.mjs"]);
+    git(cwd, ["add", "scripts/analyze-submission-risk.mjs"]);
     git(cwd, ["commit", "-m", "update submission automation"]);
 
     const outputs = runClassifier(cwd, baseSha);
@@ -109,6 +141,23 @@ describe("PR change classifier", () => {
       content: "false",
       registry: "true",
       web: "true",
+    });
+  });
+
+  it("routes private submission gate changes through the gate lane", () => {
+    const { cwd, baseSha } = createFixtureRepo();
+    const gateDir = path.join(cwd, "apps", "submission-gate", "src");
+    fs.mkdirSync(gateDir, { recursive: true });
+    fs.writeFileSync(path.join(gateDir, "index.ts"), "export default {};\n");
+    git(cwd, ["add", "apps/submission-gate/src/index.ts"]);
+    git(cwd, ["commit", "-m", "update submission gate"]);
+
+    const outputs = runClassifier(cwd, baseSha);
+    expect(outputs).toMatchObject({
+      submission_gate: "true",
+      content: "false",
+      registry: "false",
+      web: "false",
     });
   });
 });

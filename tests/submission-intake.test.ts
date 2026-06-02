@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -28,11 +28,7 @@ import {
   deriveSeoFields,
   validateEntry,
 } from "@heyclaude/registry/content-schema";
-import {
-  buildIssueTemplateSpec,
-  buildSubmissionFieldModel,
-} from "@heyclaude/registry/submission-spec";
-import { submissionLabelsForCategory } from "@heyclaude/registry/submission-labels";
+import { buildSubmissionFieldModel } from "@heyclaude/registry/submission-spec";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 
@@ -48,31 +44,8 @@ function issue(body: string, labels = ["content-submission"]) {
   };
 }
 
-function importSubmissionDryRun(
-  issuePayload: Record<string, unknown>,
-  env: Record<string, string> = {},
-) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "heyclaude-issue-"));
-  const issuePath = path.join(tmpDir, "issue.json");
-  fs.writeFileSync(issuePath, `${JSON.stringify(issuePayload, null, 2)}\n`);
-  return execFileSync(
-    process.execPath,
-    [
-      "scripts/import-submission-issue.mjs",
-      "--issue-json",
-      issuePath,
-      "--dry-run",
-    ],
-    {
-      cwd: repoRoot,
-      env: { ...process.env, ...env },
-      encoding: "utf8",
-    },
-  );
-}
-
 describe("submission intake", () => {
-  it("derives web form and issue template fields from registry specs", () => {
+  it("derives PR-first web form fields from registry specs", () => {
     const model = buildSubmissionFieldModel("skills");
     expect(model).toBeTruthy();
     expect(
@@ -106,16 +79,6 @@ describe("submission intake", () => {
     expect(
       model?.fields.some(
         (field) => field.id === "brand_domain" && !field.required,
-      ),
-    ).toBe(true);
-
-    const issueTemplate = buildIssueTemplateSpec("mcp");
-    expect(issueTemplate).toBeTruthy();
-    expect(issueTemplate?.labels).toContain("content-submission");
-    expect(issueTemplate?.labels).toEqual(submissionLabelsForCategory("mcp"));
-    expect(
-      issueTemplate?.fields.some(
-        (field) => field.id === "install_command" && field.required,
       ),
     ).toBe(true);
   });
@@ -152,171 +115,6 @@ describe("submission intake", () => {
       "community-mcp",
     ]);
     expect(validateSubmission(draft).ok).toBe(true);
-  });
-
-  it("imports direct GitHub submissions with content-level provenance", () => {
-    const output = importSubmissionDryRun(
-      {
-        number: 777,
-        html_url: "https://github.com/JSONbored/awesome-claude/issues/777",
-        created_at: "2026-04-28T12:34:56Z",
-        user: {
-          login: "content-author",
-          html_url: "https://github.com/content-author",
-        },
-        body: buildSubmissionIssueDraft({
-          name: "Provenance MCP",
-          slug: "provenance-mcp",
-          category: "mcp",
-          author: "Example Team",
-          docs_url: "https://example.com/docs",
-          description:
-            "MCP server submitted through a direct GitHub issue with provenance.",
-          card_description: "Direct GitHub issue provenance coverage.",
-          install_command: "npx -y provenance-mcp",
-          usage_snippet:
-            "claude mcp add provenance-mcp -- npx -y provenance-mcp",
-          safety_notes:
-            "Installs and runs an MCP server process from the submitted package.",
-          privacy_notes:
-            "Not applicable: this fixture does not access user files or credentials.",
-        }).body,
-        labels: [{ name: "content-submission" }, { name: "community-mcp" }],
-      },
-      {
-        SUBMISSION_REVIEWED_BY: "JSONbored",
-        SUBMISSION_REVIEWED_AT: "2026-04-29T00:00:00Z",
-      },
-    );
-
-    expect(output).toContain("submittedBy: content-author");
-    expect(output).toContain(
-      'submittedByUrl: "https://github.com/content-author"',
-    );
-    expect(output).toContain('submittedAt: "2026-04-28T12:34:56Z"');
-    expect(output).toContain("submissionIssueNumber: 777");
-    expect(output).toContain(
-      'submissionIssueUrl: "https://github.com/JSONbored/awesome-claude/issues/777"',
-    );
-    expect(output).toContain("reviewedBy: JSONbored");
-    expect(output).toContain("claimStatus: unclaimed");
-  });
-
-  it("does not publish website token owners as submitters", () => {
-    const output = importSubmissionDryRun({
-      number: 778,
-      html_url: "https://github.com/JSONbored/awesome-claude/issues/778",
-      created_at: "2026-04-28T12:34:56Z",
-      user: {
-        login: "JSONbored",
-        html_url: "https://github.com/JSONbored",
-      },
-      body: buildSubmissionIssueDraft({
-        name: "Website Token MCP",
-        slug: "website-token-mcp",
-        category: "mcp",
-        author: "Example Team",
-        contact_email: "maintainer@example.com",
-        submitted_via: "website",
-        docs_url: "https://example.com/docs",
-        description:
-          "MCP server submitted through the website with private contact details.",
-        card_description: "Website token provenance privacy coverage.",
-        install_command: "npx -y website-token-mcp",
-        usage_snippet:
-          "claude mcp add website-token-mcp -- npx -y website-token-mcp",
-        safety_notes:
-          "Installs and runs an MCP server process from the submitted package.",
-        privacy_notes:
-          "Not applicable: this fixture does not access user files or credentials.",
-      }).body,
-      labels: [{ name: "content-submission" }, { name: "community-mcp" }],
-    });
-
-    expect(output).not.toContain("submittedBy:");
-    expect(output).not.toContain("submittedByUrl:");
-    expect(output).not.toContain("submittedBy: JSONbored");
-    expect(output).not.toContain(
-      "submittedByUrl: https://github.com/JSONbored",
-    );
-    expect(output).not.toContain("maintainer@example.com");
-  });
-
-  it("does not trust website public contact handles as submitter provenance", () => {
-    const output = importSubmissionDryRun({
-      number: 780,
-      html_url: "https://github.com/JSONbored/awesome-claude/issues/780",
-      created_at: "2026-04-28T12:34:56Z",
-      user: {
-        login: "JSONbored",
-        html_url: "https://github.com/JSONbored",
-      },
-      body: buildSubmissionIssueDraft({
-        name: "Website Contact Spoof MCP",
-        slug: "website-contact-spoof-mcp",
-        category: "mcp",
-        author: "Example Team",
-        contact_email: "victim-user",
-        submitted_via: "website",
-        docs_url: "https://example.com/docs",
-        description:
-          "MCP server submitted through the website with an unverified public contact handle.",
-        card_description: "Website public contact provenance spoof coverage.",
-        install_command: "npx -y website-contact-spoof-mcp",
-        usage_snippet:
-          "claude mcp add website-contact-spoof-mcp -- npx -y website-contact-spoof-mcp",
-        safety_notes:
-          "Installs and runs an MCP server process from the submitted package.",
-        privacy_notes:
-          "Not applicable: this fixture does not access user files or credentials.",
-      }).body,
-      labels: [{ name: "content-submission" }, { name: "community-mcp" }],
-    });
-
-    expect(output).not.toContain("submittedBy:");
-    expect(output).not.toContain("submittedByUrl:");
-    expect(output).not.toContain("submittedBy: victim-user");
-    expect(output).not.toContain("https://github.com/victim-user");
-    expect(output).not.toContain("submittedBy: JSONbored");
-  });
-
-  it("does not trust submitted_via from direct GitHub issue bodies", () => {
-    const output = importSubmissionDryRun({
-      number: 779,
-      html_url: "https://github.com/JSONbored/awesome-claude/issues/779",
-      created_at: "2026-04-28T12:34:56Z",
-      user: {
-        login: "attacker-user",
-        html_url: "https://github.com/attacker-user",
-      },
-      body: buildSubmissionIssueDraft({
-        name: "Spoofed Website MCP",
-        slug: "spoofed-website-mcp",
-        category: "mcp",
-        author: "Example Team",
-        contact_email: "victim-user",
-        submitted_via: "website",
-        docs_url: "https://example.com/docs",
-        description:
-          "MCP server submitted through a direct GitHub issue with a forged website marker.",
-        card_description: "Direct issue provenance spoof coverage.",
-        install_command: "npx -y spoofed-website-mcp",
-        usage_snippet:
-          "claude mcp add spoofed-website-mcp -- npx -y spoofed-website-mcp",
-        safety_notes:
-          "Installs and runs an MCP server process from the submitted package.",
-        privacy_notes:
-          "Not applicable: this fixture does not access user files or credentials.",
-      }).body,
-      labels: [{ name: "content-submission" }, { name: "community-mcp" }],
-    });
-
-    expect(output).toContain("submittedBy: attacker-user");
-    expect(output).toContain(
-      'submittedByUrl: "https://github.com/attacker-user"',
-    );
-    expect(output).not.toContain("submittedBy: victim-user");
-    expect(output).not.toContain("https://github.com/victim-user");
   });
 
   it("normalizes brand domains and rejects unsafe brand values", () => {
@@ -394,37 +192,14 @@ Not applicable: this fixture does not access user files or credentials.`),
     );
   });
 
-  it("keeps checked-in GitHub issue templates aligned with registry specs", () => {
+  it("does not expose public content issue templates", () => {
+    const templateDir = path.join(repoRoot, ".github", "ISSUE_TEMPLATE");
+    const contentTemplates = fs
+      .readdirSync(templateDir)
+      .filter((fileName) => fileName.startsWith("submit-"));
+    expect(contentTemplates).toEqual([]);
     for (const category of categorySpec.submissionOrder) {
-      const template = buildIssueTemplateSpec(category);
-      expect(template).toBeTruthy();
-      const templatePath = path.join(
-        repoRoot,
-        ".github",
-        "ISSUE_TEMPLATE",
-        template!.template,
-      );
-      const source = fs.readFileSync(templatePath, "utf8");
-      for (const label of template!.labels) {
-        expect(source).toContain(`  - "${label}"`);
-      }
-      for (const field of template!.fields.filter((field) => field.required)) {
-        expect(source).toContain(`    id: ${field.id}`);
-        expect(source).toContain("      required: true");
-      }
-      expect(source).toContain(
-        "eligible submissions may be approved for an import PR",
-      );
-      expect(source).toContain(
-        "Do not open a separate README change for issue submissions",
-      );
-      expect(source).toContain(
-        "I understand imports regenerate the README and registry artifacts automatically",
-      );
-      expect(source).toContain(
-        "community ZIP/MCPB artifacts are not published as HeyClaude-hosted downloads",
-      );
-      expect(source).toContain("not affiliate, referral, or tracking URLs");
+      expect(categorySpec.categories[category]?.template).toBe("");
     }
   });
 
@@ -703,7 +478,7 @@ npx unslop --help`);
     expect(queue.entries[0].reviewChecklist).toEqual(
       expect.arrayContaining([
         "Confirm the category, slug, and public-facing metadata.",
-        "Auto-import may open a PR after gates pass; maintainer review still gates merge.",
+        "Content-only PRs may merge automatically after content validation, Superagent, and private maintainer-agent review pass.",
       ]),
     );
     expect(queue.entries[0].autoImportEligible).toBe(true);
@@ -944,28 +719,6 @@ Improve browse conversion.
     expect(buildSubmissionQueue([mislabeled]).count).toBe(0);
   });
 
-  it("keeps offline and live queue scripts explicit about their inputs", () => {
-    const offline = spawnSync(
-      process.execPath,
-      ["scripts/build-submission-queue.mjs"],
-      { cwd: repoRoot, encoding: "utf8" },
-    );
-    expect(offline.status).toBe(1);
-    expect(offline.stderr).toContain("--issues-json <path>");
-
-    const live = spawnSync(
-      process.execPath,
-      ["scripts/build-live-submission-queue.mjs"],
-      {
-        cwd: repoRoot,
-        encoding: "utf8",
-        env: { ...process.env, PATH: "" },
-      },
-    );
-    expect(live.status).toBe(1);
-    expect(live.stderr).toContain("GitHub CLI not found");
-  });
-
   it("tracks stale author-input states without touching maintainer-approved issues", () => {
     const invalidBody = `### Name
 Unslop
@@ -997,7 +750,7 @@ npx unslop --help`;
       updatedAt: "2026-04-10T00:00:00Z",
     };
     const approved = {
-      ...issue(invalidBody, ["content-submission", "import-approved"]),
+      ...issue(invalidBody, ["content-submission", "accepted"]),
       updatedAt: "2026-04-10T00:00:00Z",
     };
 
@@ -1408,7 +1161,7 @@ The setup script may read local shell environment during installation.`),
     );
   });
 
-  it("downgrades sensitive auto-imports when privacy notes are missing", () => {
+  it("downgrades sensitive direct merges when privacy notes are missing", () => {
     const submission = issue(`### Name
 Credential MCP
 
@@ -1586,24 +1339,12 @@ Writes logs to the configured workspace
 Reads local project files, including package metadata
 Sends selected context to the configured third-party API`);
     const report = validateSubmission(submission);
-    const output = importSubmissionDryRun({
-      number: 778,
-      html_url: "https://github.com/JSONbored/awesome-claude/issues/778",
-      created_at: "2026-04-28T12:34:56Z",
-      user: {
-        login: "source-owner",
-        html_url: "https://github.com/source-owner",
-      },
-      body: submission.body,
-      labels: [{ name: "content-submission" }, { name: "community-mcp" }],
-    });
-
     expect(report.ok).toBe(true);
-    expect(output).toContain(
-      "- Runs a background worker, scheduled by the local CLI",
+    expect(report.fields.safety_notes).toContain(
+      "Runs a background worker, scheduled by the local CLI",
     );
-    expect(output).toContain(
-      "- Reads local project files, including package metadata",
+    expect(report.fields.privacy_notes).toContain(
+      "Reads local project files, including package metadata",
     );
   });
 
@@ -1940,7 +1681,7 @@ Review build logs, identify the failing step, and summarize the likely fix.`),
     expect(report.fields.full_copyable_content).toContain("Review build logs");
   });
 
-  it("preserves MCP config snippet headings during import", () => {
+  it("preserves MCP config snippet headings during validation", () => {
     const body = buildSubmissionIssueDraft({
       name: "Config Snippet MCP",
       slug: "config-snippet-mcp",
@@ -1971,21 +1712,9 @@ Review build logs, identify the failing step, and summarize the likely fix.`),
     expect(report.ok).toBe(true);
     expect(report.fields.config_snippet).toContain('"mcpServers"');
 
-    const output = importSubmissionDryRun({
-      number: 779,
-      html_url: "https://github.com/JSONbored/awesome-claude/issues/779",
-      created_at: "2026-05-10T00:00:00Z",
-      user: {
-        login: "content-author",
-        html_url: "https://github.com/content-author",
-      },
-      body,
-      labels: [{ name: "content-submission" }, { name: "community-mcp" }],
-    });
-
-    expect(output).toContain("configSnippet: |-");
-    expect(output).toContain('"mcpServers"');
-    expect(output).toContain('"url": "https://example.com/mcp"');
+    expect(report.fields.config_snippet).toContain(
+      '"url": "https://example.com/mcp"',
+    );
   });
 
   it("adds deterministic security/safety context to the maintainer queue", () => {
