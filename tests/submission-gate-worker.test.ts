@@ -20,11 +20,17 @@ import {
   verifyGitHubWebhookSignature,
 } from "../apps/submission-gate/src/security";
 import {
+  buildContentDuplicateReview,
   extractContentDuplicateSignals,
   findContentDuplicateMatch,
+  findRelatedContentMatches,
+  findStrictContentDuplicateMatch,
   protectedFrontmatterChanges,
 } from "../apps/submission-gate/src/duplicates";
-import { markerComment } from "../apps/submission-gate/src/review";
+import {
+  markerComment,
+  validationFailedDecision,
+} from "../apps/submission-gate/src/review";
 import {
   buildDiscordDecisionPayload,
   postDiscordDecisionNotification,
@@ -360,6 +366,13 @@ describe("Cloudflare submission gate helpers", () => {
     const source = readWorkerSource();
     const validationIndex = source.indexOf("getCommitValidationState({");
     const privateReviewIndex = source.indexOf("reviewWithPrivateGate(env, {");
+    const refreshIndex = source.indexOf(
+      "pullForNotification = await getPullRequest({",
+    );
+    const outOfScopeIndex = source.indexOf(
+      "await ignoreOutOfScopeReviewTarget({",
+      refreshIndex,
+    );
 
     expect(source).toContain("CONTENT_GATE_BASE_REF");
     expect(source).toContain("function contentGateBaseRef");
@@ -381,8 +394,10 @@ describe("Cloudflare submission gate helpers", () => {
     expect(source).toContain('nextReviewForStatus("validation_pending")');
     expect(source).toContain("REVIEWING_STALE_SECONDS");
     expect(source).toContain("QUEUED_STALE_SECONDS");
+    expect(source).toContain("PRIVATE_REVIEW_TIMEOUT_MS = 45_000");
     expect(source).toContain("queuedStaleBeforeIso");
     expect(source).toContain("reviewingStaleBeforeIso");
+    expect(source).toContain("lastCheckSummary: validation.summary");
     expect(source).toContain("target.headSha = pullForNotification.head.sha");
     expect(source).toContain("target: {");
     expect(source).toContain("installationId: target.installationId");
@@ -392,8 +407,27 @@ describe("Cloudflare submission gate helpers", () => {
     expect(source).toContain("validation: validationForPrivateReview");
     expect(source).toContain("contentScope: contentScopeForPrivateReview");
     expect(source).toContain("duplicateHistoryRequired: true");
+    expect(source).toContain("deterministicDuplicateReview");
+    expect(source).toContain('eventType: "duplicate_shadow_review"');
+    expect(source).toContain('decision: "related_not_strict_duplicate"');
+    expect(source).toContain("function ignoreOutOfScopeReviewTarget");
+    expect(source).toContain(
+      "Skipped because this PR no longer targets the configured content gate base.",
+    );
+    expect(outOfScopeIndex).toBeGreaterThan(refreshIndex);
+    expect(outOfScopeIndex).toBeLessThan(validationIndex);
     expect(validationIndex).toBeGreaterThan(0);
     expect(privateReviewIndex).toBeGreaterThan(validationIndex);
+  });
+
+  it("closes public validation failures instead of requesting changes", () => {
+    expect(validationFailedDecision("Required validation failed.")).toEqual({
+      verdict: "close",
+      summary:
+        "Required validation failed. The private content review will run after the public validation lane is green.",
+      labels: ["submission-closed-by-gate"],
+      close: true,
+    });
   });
 
   it("allows only trusted maintainer comments to trigger rechecks", () => {
@@ -413,7 +447,7 @@ describe("Cloudflare submission gate helpers", () => {
     expect(source).toContain('"MEMBER"');
     expect(source).toContain('"COLLABORATOR"');
     expect(source).toContain("targetFromIssueCommentRecheck");
-    expect(issueCommentBlock).toContain("true,\n      true,");
+    expect(issueCommentBlock).toContain("payload,\n      true,");
   });
 
   it("renders Taopedia-style verdict comments with stable sections", () => {
@@ -429,7 +463,7 @@ describe("Cloudflare submission gate helpers", () => {
         "Recommended Action:",
         "- Close and resubmit a focused PR.",
       ].join("\n"),
-      labels: ["submission-needs-changes"],
+      labels: ["submission-closed-by-gate"],
       close: true,
     });
 
@@ -1071,6 +1105,104 @@ websiteUrl: "https://example-agent-tool.dev/pricing"
     expect(findContentDuplicateMatch(candidate, [existing])).toMatchObject({
       reasons: expect.arrayContaining([
         expect.stringContaining("same non-generic source domain"),
+      ]),
+    });
+    expect(findStrictContentDuplicateMatch(candidate, [existing])).toBeNull();
+    expect(findRelatedContentMatches(candidate, [existing])).toMatchObject([
+      {
+        reasons: expect.arrayContaining([
+          expect.stringContaining("same non-generic source domain"),
+        ]),
+      },
+    ]);
+    expect(buildContentDuplicateReview(candidate, [existing])).toMatchObject({
+      legacyDuplicate: {
+        reasons: expect.arrayContaining([
+          expect.stringContaining("same non-generic source domain"),
+        ]),
+      },
+      strictDuplicate: null,
+      relatedCandidates: [
+        {
+          reasons: expect.arrayContaining([
+            expect.stringContaining("same non-generic source domain"),
+          ]),
+        },
+      ],
+    });
+  });
+
+  it("distinguishes related vendor resources from strict duplicates", () => {
+    const collection = extractContentDuplicateSignals({
+      filePath: "content/collections/cloudflare-ai-workflow-stack.mdx",
+      content: `---
+title: Cloudflare AI Workflow Stack
+slug: cloudflare-ai-workflow-stack
+category: collections
+description: A collection of Cloudflare tools for building AI workflow systems.
+websiteUrl: "https://developers.cloudflare.com/workers-ai/"
+docsUrl: "https://developers.cloudflare.com/ai-gateway/"
+---
+`,
+    });
+    const specificTool = extractContentDuplicateSignals({
+      filePath: "content/tools/cloudflare-ai-gateway.mdx",
+      content: `---
+title: Cloudflare AI Gateway
+slug: cloudflare-ai-gateway
+category: tools
+description: Observability and routing gateway for AI model calls.
+websiteUrl: "https://developers.cloudflare.com/ai-gateway/"
+docsUrl: "https://developers.cloudflare.com/ai-gateway/get-started/"
+---
+`,
+    });
+
+    expect(
+      findStrictContentDuplicateMatch(specificTool, [collection]),
+    ).toBeNull();
+    expect(findRelatedContentMatches(specificTool, [collection])).toMatchObject(
+      [
+        {
+          reasons: expect.arrayContaining([
+            expect.stringContaining(
+              "same canonical source URL https://developers.cloudflare.com/ai-gateway across collection/resource categories",
+            ),
+          ]),
+        },
+      ],
+    );
+  });
+
+  it("treats same canonical repository as a strict duplicate", () => {
+    const existing = extractContentDuplicateSignals({
+      filePath: "content/mcp/playwright-mcp-server.mdx",
+      content: `---
+title: Playwright MCP Server
+slug: playwright-mcp-server
+category: mcp
+description: MCP server for browser automation through Playwright.
+repoUrl: "https://github.com/microsoft/playwright-mcp"
+---
+`,
+    });
+    const candidate = extractContentDuplicateSignals({
+      filePath: "content/mcp/browser-automation-mcp.mdx",
+      content: `---
+title: Browser Automation MCP
+slug: browser-automation-mcp
+category: mcp
+description: Browser automation MCP server for Claude.
+repoUrl: "https://github.com/microsoft/playwright-mcp.git?utm_source=heyclaude"
+---
+`,
+    });
+
+    expect(
+      findStrictContentDuplicateMatch(candidate, [existing]),
+    ).toMatchObject({
+      reasons: expect.arrayContaining([
+        expect.stringContaining("same canonical source URL"),
       ]),
     });
   });
