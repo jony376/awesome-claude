@@ -4,7 +4,6 @@ import {
   CONTENT_CATEGORY_LABEL_PREFIX,
   DEFAULT_REVIEW_MARKER,
   LABELS,
-  PILOT_LABEL,
   REVIEWABLE_PR_ACTIONS,
 } from "./constants";
 import {
@@ -14,9 +13,11 @@ import {
   slugify,
 } from "./drafts";
 import {
+  buildContentDuplicateReview,
   extractContentDuplicateSignals,
   findContentDuplicateMatch,
   protectedFrontmatterChanges,
+  type ContentDuplicateReview,
   type ContentDuplicateSignals,
 } from "./duplicates";
 import {
@@ -78,7 +79,6 @@ type Env = {
   PUBLIC_REPO: string;
   ALLOWED_IMPORT_REPOS?: string;
   CONTENT_GATE_BASE_REF?: string;
-  PILOT_BASE_REF: string;
   GITHUB_API_VERSION: string;
   REVIEW_MARKER: string;
   GITHUB_APP_CLIENT_ID?: string;
@@ -151,6 +151,7 @@ const QUEUED_STALE_SECONDS = 60;
 const REVIEWING_STALE_SECONDS = 180;
 const MERGE_RETRY_SECONDS = 30;
 const RETRYABLE_ERROR_SECONDS = 60;
+const PRIVATE_REVIEW_TIMEOUT_MS = 45_000;
 const SWEEP_LIMIT = 25;
 const SUPPORTED_CONTENT_CATEGORIES = new Set([
   "agents",
@@ -251,7 +252,6 @@ const TRUSTED_RECHECK_ASSOCIATIONS = new Set([
 ]);
 const DECISION_LABELS = [
   LABELS.underReview,
-  LABELS.requestChanges,
   LABELS.manual,
   LABELS.close,
   LABELS.merged,
@@ -332,7 +332,7 @@ function isoBefore(seconds: number) {
 }
 
 function contentGateBaseRef(env: Env) {
-  return env.CONTENT_GATE_BASE_REF || env.PILOT_BASE_REF || "main";
+  return env.CONTENT_GATE_BASE_REF || "main";
 }
 
 function truncateForQueue(value: unknown, maxLength = 500) {
@@ -818,14 +818,10 @@ function isContentGatePr(payload: Record<string, unknown>, env: Env) {
         number?: number;
         draft?: boolean;
         base?: { ref?: string; repo?: { full_name?: string } };
-        labels?: Array<{ name?: string }>;
       }
     | undefined;
   if (!pull || pull.draft) return false;
-  const labels = pull.labels?.map((label) => label.name) || [];
-  return (
-    pull.base?.ref === contentGateBaseRef(env) || labels.includes(PILOT_LABEL)
-  );
+  return pull.base?.ref === contentGateBaseRef(env);
 }
 
 function parseCsv(value: string | undefined, fallback: string[] = []) {
@@ -1073,12 +1069,6 @@ function isRecheckCommand(body: unknown) {
   );
 }
 
-function hasPilotLabel(issue: { labels?: Array<{ name?: string }> }) {
-  return Boolean(
-    issue.labels?.some((label) => String(label.name || "") === PILOT_LABEL),
-  );
-}
-
 async function targetFromIssueCommentRecheck(
   env: Env,
   payload: Record<string, unknown>,
@@ -1091,7 +1081,6 @@ async function targetFromIssueCommentRecheck(
     | {
         number?: number;
         pull_request?: Record<string, unknown>;
-        labels?: Array<{ name?: string }>;
       }
     | undefined;
   const repository = payload.repository as { full_name?: string } | undefined;
@@ -1117,7 +1106,7 @@ async function targetFromIssueCommentRecheck(
   if (pull.draft) return null;
   const target = reviewTargetFromPullRecord(pull, installationId);
   if (!target) return null;
-  if (target.baseRef !== contentGateBaseRef(env) && !hasPilotLabel(issue)) {
+  if (target.baseRef !== contentGateBaseRef(env)) {
     return null;
   }
   return target;
@@ -1143,6 +1132,42 @@ function hasTerminalGateDecision(
 
 function isOpenPullRequest(pull: { state?: string }) {
   return String(pull.state || "").toLowerCase() === "open";
+}
+
+async function ignoreOutOfScopeReviewTarget(params: {
+  env: Env;
+  token: string;
+  repo: ReturnType<typeof parseRepo>;
+  target: ReviewTarget;
+  message: QueueMessage;
+  summary: string;
+}) {
+  await removeLabels({
+    token: params.token,
+    repo: params.repo,
+    issueNumber: params.target.number,
+    labels: RECONCILED_GATE_LABELS,
+    apiVersion: params.env.GITHUB_API_VERSION,
+  });
+  await upsertPrState(params.env.SUBMISSION_GATE_DB, {
+    repo: params.target.repoFullName,
+    number: params.target.number,
+    headRepo: params.target.headRepo,
+    headRef: params.target.headRef,
+    headSha: params.target.headSha,
+    baseRef: params.target.baseRef || contentGateBaseRef(params.env),
+    installationId: params.target.installationId,
+    status: "ignored",
+    deliveryId: String(params.message.payload.deliveryId || ""),
+    lastError: params.summary,
+  });
+  await insertAudit(params.env.SUBMISSION_GATE_DB, {
+    id: crypto.randomUUID(),
+    targetKey: params.message.targetKey,
+    eventType: params.message.kind,
+    decision: "ignored",
+    summary: params.summary,
+  });
 }
 
 function isRetryableMergeError(error: unknown) {
@@ -1778,6 +1803,34 @@ function duplicateCloseDecision(
   };
 }
 
+function summarizeDuplicateReview(review: ContentDuplicateReview) {
+  return {
+    legacyDuplicate: review.legacyDuplicate
+      ? {
+          target:
+            review.legacyDuplicate.existing.label ||
+            review.legacyDuplicate.existing.filePath,
+          url: review.legacyDuplicate.existing.url,
+          reasons: review.legacyDuplicate.reasons,
+        }
+      : null,
+    strictDuplicate: review.strictDuplicate
+      ? {
+          target:
+            review.strictDuplicate.existing.label ||
+            review.strictDuplicate.existing.filePath,
+          url: review.strictDuplicate.existing.url,
+          reasons: review.strictDuplicate.reasons,
+        }
+      : null,
+    relatedCandidates: review.relatedCandidates.map((match) => ({
+      target: match.existing.label || match.existing.filePath,
+      url: match.existing.url,
+      reasons: match.reasons,
+    })),
+  };
+}
+
 function protectedEditCloseDecision(changedFields: string[]): GateDecision {
   return {
     verdict: "close" as const,
@@ -1949,12 +2002,14 @@ async function deterministicContentPrecheck(params: {
       apiVersion: params.env.GITHUB_API_VERSION,
     })),
   ];
+  const duplicateReview = buildContentDuplicateReview(candidate, existing);
   return {
     content: candidateContent,
     decision: duplicateCloseDecision(
-      findContentDuplicateMatch(candidate, existing),
+      duplicateReview.legacyDuplicate,
       candidate,
     ),
+    duplicateReview: summarizeDuplicateReview(duplicateReview),
   };
 }
 
@@ -1964,10 +2019,9 @@ async function enqueueReviewTarget(
   deliveryId: string,
   eventName: string,
   webhook?: Record<string, unknown>,
-  pilotScoped = false,
   forceRecheck = false,
 ) {
-  if (!pilotScoped && target.baseRef !== contentGateBaseRef(env)) return false;
+  if (target.baseRef !== contentGateBaseRef(env)) return false;
   const targetKey = targetKeyForReview(target);
   const reviewScanKey = reviewScanKeyForTarget(target);
   const existing = await getPrState(env.SUBMISSION_GATE_DB, {
@@ -2202,7 +2256,6 @@ async function githubWebhookRoute(
       eventName,
       payload,
       true,
-      true,
     );
     const targetKey = targetKeyForReview(target);
     return json({ ok: true, queued: true, targetKey });
@@ -2227,7 +2280,6 @@ async function githubWebhookRoute(
       deliveryId,
       eventName,
       payload,
-      true,
       true,
     );
     const targetKey = targetKeyForReview(target);
@@ -2270,7 +2322,7 @@ async function reviewWithPrivateGate(env: Env, message: QueueMessage) {
         "x-heyclaude-internal-signature": signature,
       },
       body,
-      signal: AbortSignal.timeout(90_000),
+      signal: AbortSignal.timeout(PRIVATE_REVIEW_TIMEOUT_MS),
     });
   } catch {
     return defaultManualDecision("Private corpus review request failed.");
@@ -2561,6 +2613,18 @@ async function handleReviewMessage(env: Env, message: QueueMessage) {
         target.headRepo =
           pullForNotification.head?.repo?.full_name || target.headRepo;
         target.baseRef = pullForNotification.base?.ref || target.baseRef || "";
+        if (target.baseRef !== contentGateBaseRef(env)) {
+          await ignoreOutOfScopeReviewTarget({
+            env,
+            token,
+            repo,
+            target,
+            message,
+            summary:
+              "Skipped because this PR no longer targets the configured content gate base.",
+          });
+          return;
+        }
         await upsertPrState(env.SUBMISSION_GATE_DB, {
           repo: target.repoFullName,
           number: target.number,
@@ -2692,6 +2756,19 @@ async function handleReviewMessage(env: Env, message: QueueMessage) {
             summary: validation.summary,
             checks: validation.checks,
           };
+          await upsertPrState(env.SUBMISSION_GATE_DB, {
+            repo: target.repoFullName,
+            number: target.number,
+            headRepo: target.headRepo,
+            headRef: target.headRef,
+            headSha: target.headSha,
+            baseRef: target.baseRef || contentGateBaseRef(env),
+            installationId: target.installationId,
+            status: "reviewing",
+            deliveryId: String(message.payload.deliveryId || ""),
+            nextReviewAt: null,
+            lastCheckSummary: validation.summary,
+          });
         }
       } catch {
         decision = defaultManualDecision(
@@ -2708,6 +2785,27 @@ async function handleReviewMessage(env: Env, message: QueueMessage) {
             target,
             scope: contentScopeForPrivateReview,
           });
+          if (precheck.duplicateReview) {
+            validationForPrivateReview = {
+              ...(isRecord(validationForPrivateReview)
+                ? validationForPrivateReview
+                : {}),
+              deterministicDuplicateReview: precheck.duplicateReview,
+            };
+            if (
+              precheck.duplicateReview.legacyDuplicate &&
+              !precheck.duplicateReview.strictDuplicate
+            ) {
+              await insertAudit(env.SUBMISSION_GATE_DB, {
+                id: crypto.randomUUID(),
+                targetKey: message.targetKey,
+                eventType: "duplicate_shadow_review",
+                decision: "related_not_strict_duplicate",
+                summary:
+                  "Legacy duplicate classifier matched, but strict duplicate classifier only found related-content context.",
+              });
+            }
+          }
           if (precheck.decision) {
             decision = precheck.decision;
           } else {
@@ -3069,7 +3167,6 @@ async function sweepSubmissionQueue(env: Env) {
         deliveryId,
         "scheduled",
         undefined,
-        false,
         false,
       )
     ) {
