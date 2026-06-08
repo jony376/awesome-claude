@@ -250,7 +250,6 @@ function resolveFiles({ repoRoot, args }) {
 
 function sourceTypeFromContext({ args, headRepo, baseRepo, headRef }) {
   if (args["source-type"]) return normalizeText(args["source-type"]);
-  if (/^automation\/submission-\d+-/.test(headRef)) return "automation_import";
   if (
     headRepo &&
     baseRepo &&
@@ -258,6 +257,7 @@ function sourceTypeFromContext({ args, headRepo, baseRepo, headRef }) {
   ) {
     return "external_direct";
   }
+  if (/^automation\/submission-\d+-/.test(headRef)) return "automation_import";
   return "same_repo_direct";
 }
 

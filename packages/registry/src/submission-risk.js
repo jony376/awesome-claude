@@ -1548,7 +1548,6 @@ function addGeneratedArtifactSignals(report, files, contentFiles, sourceType) {
 function prSourceType(input = {}) {
   if (input.sourceType) return normalizeText(input.sourceType);
   const headRef = normalizeText(input.pullRequest?.head?.ref);
-  if (/^automation\/submission-\d+-/.test(headRef)) return "automation_import";
   const headRepo = normalizeText(
     input.pullRequest?.head?.repo?.full_name ||
       input.pullRequest?.head?.repo?.fullName,
@@ -1559,9 +1558,12 @@ function prSourceType(input = {}) {
   );
   if (headRepo && baseRepo) {
     return headRepo.toLowerCase() === baseRepo.toLowerCase()
-      ? "same_repo_direct"
+      ? /^automation\/submission-\d+-/.test(headRef)
+        ? "automation_import"
+        : "same_repo_direct"
       : "external_direct";
   }
+  if (/^automation\/submission-\d+-/.test(headRef)) return "automation_import";
   return "same_repo_direct";
 }
 
