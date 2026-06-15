@@ -21,6 +21,8 @@ import {
   FAVORITES_KEY,
   absoluteDataUrl,
   buildEntrySummary,
+  buildInstallNotesSummary,
+  normalizeNotes,
   buildContributeEntryUrl,
   buildSuggestChangeUrl,
   categoryLabel,
@@ -746,13 +748,23 @@ export function createRegistryCommand(options: RegistryCommandOptions = {}) {
               .slice(0, 4)
               .join(", ")}${plan.envPlaceholders.length > 4 ? ", ..." : ""}`
           : "";
+        // Surface the entry's disclosed safety/privacy notes before the user
+        // commits to writing config or running a server process. Prefer the
+        // richer detail payload, but only when it has meaningful (non-blank)
+        // notes — otherwise fall back to the compact list entry.
+        const pickNotes = (primary?: string[], fallback?: string[]) =>
+          normalizeNotes(primary).length ? primary : fallback;
+        const notesSummary = buildInstallNotesSummary(
+          pickNotes(detail.safetyNotes, entry.safetyNotes),
+          pickNotes(detail.privacyNotes, entry.privacyNotes),
+        );
         const installSummary =
           plan.installKind === "cli"
             ? `This will add a ${plan.scopeLabel}-scoped MCP server through the ${target.label} CLI.`
             : `This will update your ${plan.scopeLabel} ${target.label} MCP config and create a backup before replacing an existing server.`;
         const confirmed = await confirmAlert({
           title: `Install ${plan.name} in ${target.label}?`,
-          message: `${installSummary}${warningSummary}`,
+          message: `${installSummary}${notesSummary}${warningSummary}`,
           primaryAction: { title: "Install" },
           dismissAction: { title: "Cancel" },
         });
