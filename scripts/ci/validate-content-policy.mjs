@@ -68,6 +68,28 @@ const EXPLICIT_CREDENTIAL_STEALING_PATTERN =
   /\b(?:credential|password|cookie|session|token|wallet)s?\b[\s\S]{0,80}\bsteals?\b|\bsteals?\b[\s\S]{0,80}\b(?:credential|password|cookie|session|token|wallet)s?\b|\b(?:credential|password|cookie) stealer|keylogger\b/i;
 const ABUSE_ENABLEMENT_PATTERN =
   /\b(build|create|generate|run|deploy|use|ship)\b[\s\S]{0,80}\b(credential stealer|password stealer|cookie stealer|keylogger|steal credentials|exfiltrat(?:e|ion)|harvest cookies|dump tokens?)\b/i;
+// Adult "xxx" only in an explicit adult context, so the legitimate developer
+// idioms `TODO|FIXME|XXX` (code markers) and `(XXX) XXX-XXXX` (phone masks) are
+// not flagged. The bare-word `xxx` alternative was removed from the
+// prohibited-content list in favor of this multi-token pattern.
+const ADULT_XXX_PATTERN =
+  /\bxxx[\s._-]*(?:porn|porno|sex|sexual|adult|nude|nudes|nsfw|hardcore|rated|video|videos|movie|movies|content|hub|tube|cam|cams|chat)\b|\b(?:porn|porno|sex|sexual|adult|nude|nudes|nsfw|hardcore)[\s._-]*xxx\b|\bxxx\.(?:com|net|org|xxx|tube|hub)\b|\.xxx\b/i;
+// Loopback HTTP endpoints (127.0.0.1 / localhost / [::1] / 0.0.0.0, any
+// port/path) are not an insecure-transport risk — many local MCP servers and
+// hooks legitimately run on http loopback (e.g. Figma Dev Mode
+// http://127.0.0.1:3845/mcp).
+//
+// No SSRF surface: this scanner only string-classifies URLs found in install
+// text; it never fetches them. The exemption applies solely to the
+// `non_https_executable_source` check over `executableSourceUrls` (install/usage
+// snippets), which are not retrieved here or by the grounding fetcher (that
+// fetches documentationUrl/retrievalSources only). So marking a loopback install
+// URL as "not insecure transport" cannot trigger any request.
+const LOOPBACK_HTTP_PATTERN =
+  /^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]|0\.0\.0\.0)(?::\d+)?(?![\w.-])/i;
+function isLoopbackHttpUrl(value) {
+  return typeof value === "string" && LOOPBACK_HTTP_PATTERN.test(value.trim());
+}
 const FULL_COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/i;
 const LOCAL_SCRIPT_REFERENCE_PATTERN =
   /(?:^|[\s`;&|])(?:(?:bash|sh|zsh|pwsh|powershell)\s+)?(?:\.{1,2}\/|[\w.-]+\/)?[\w./-]*(?:install|setup|start|bootstrap|init)[\w.-]*\.(?:sh|bash|zsh|ps1)\b/im;
@@ -351,9 +373,16 @@ function isLikelyAffiliateUrl(value) {
       }
     }
 
-    return /\/(ref|refer|referral|affiliate|partners?)(?:\/|$)/i.test(
-      url.pathname,
-    );
+    // Explicit affiliate path segments anywhere in the path.
+    if (/\/(referral|affiliate|partners?)(?:\/|$)/i.test(url.pathname)) {
+      return true;
+    }
+    // Bare `/ref` or `/refer` ONLY as the terminal path segment (affiliate
+    // shortlinks like example.com/ref). A `ref` segment with more after it is
+    // almost always a docs "reference" section (e.g. go.dev/ref/mod), not an
+    // affiliate link, so it is not flagged here — genuine affiliate links use a
+    // `ref=` query param (handled above) instead.
+    return /^\/(ref|refer)\/?$/i.test(url.pathname);
   } catch {
     return /\b(affiliate|referral|ref=|via=)\b/i.test(raw);
   }
@@ -795,7 +824,11 @@ function addContentRiskSignals(report, fields, content) {
     );
   }
 
-  if (executableSourceUrls.some((url) => url.startsWith("http://"))) {
+  if (
+    executableSourceUrls.some(
+      (url) => url.startsWith("http://") && !isLoopbackHttpUrl(url),
+    )
+  ) {
     addFlag(
       report,
       "critical",
@@ -877,7 +910,8 @@ function addContentRiskSignals(report, fields, content) {
 
   if (
     /\b(csam|child sexual abuse|child exploitation)\b/i.test(text) ||
-    /\b(porn|pornographic|explicit sexual|xxx|onlyfans)\b/i.test(text) ||
+    /\b(porn|pornographic|explicit sexual|onlyfans)\b/i.test(text) ||
+    ADULT_XXX_PATTERN.test(text) ||
     /\bterrorist recruitment|violent extremist recruitment\b/i.test(text)
   ) {
     addFlag(
