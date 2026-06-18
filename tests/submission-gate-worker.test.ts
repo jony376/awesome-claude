@@ -506,6 +506,8 @@ describe("Cloudflare submission gate helpers", () => {
     expect(source).toContain("contentScope: contentScopeForPrivateReview");
     expect(source).toContain("duplicateHistoryRequired: true");
     expect(source).toContain("strictDuplicatePolicy:");
+    expect(source).toContain("const hardCloseDuplicate =");
+    expect(source).toContain('reason.startsWith("same canonical source URL ")');
     expect(source).toContain("relatedContentPolicy:");
     expect(source).toContain("collectionPolicy:");
     expect(source).toContain("defensiveSecurityPolicy:");
@@ -2580,6 +2582,8 @@ ${urls}
     expect(helperSource).toContain("DIRECTORY_ENTRY_URL_SIGNAL_FIELDS");
     expect(helperSource).toContain("entry[field]");
     expect(helperSource).toContain("Array.isArray(entry.sourceUrls)");
+    expect(helperSource).toContain("entry.trustSignals");
+    expect(helperSource).toContain("trustSignalSourceUrls");
   });
 
   it("detects duplicate submissions from list-form source URLs", () => {

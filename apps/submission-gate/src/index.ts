@@ -2187,9 +2187,21 @@ function contentSignalSourceFromDirectoryEntry(entry: Record<string, unknown>) {
     const value = entry[field];
     if (value) lines.push(`${field}: ${yamlScalar(value)}`);
   }
-  if (Array.isArray(entry.sourceUrls) && entry.sourceUrls.length) {
+  const trustSignals = entry.trustSignals;
+  const trustSignalSourceUrls =
+    trustSignals && typeof trustSignals === "object"
+      ? (trustSignals as { sourceUrls?: unknown }).sourceUrls
+      : null;
+  const sourceUrls = [
+    ...(Array.isArray(entry.sourceUrls) ? entry.sourceUrls : []),
+    ...(Array.isArray(trustSignalSourceUrls) ? trustSignalSourceUrls : []),
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value, index, list) => list.indexOf(value) === index);
+  if (sourceUrls.length) {
     lines.push("sourceUrls:");
-    for (const value of entry.sourceUrls) {
+    for (const value of sourceUrls) {
       lines.push(`  - ${yamlScalar(value)}`);
     }
   }
@@ -2360,12 +2372,16 @@ async function deterministicContentPrecheck(params: {
     })),
   ];
   const duplicateReview = buildContentDuplicateReview(candidate, existing);
+  const hardCloseDuplicate =
+    duplicateReview.strictDuplicate ||
+    (duplicateReview.legacyDuplicate?.reasons.some((reason) =>
+      reason.startsWith("same canonical source URL "),
+    )
+      ? duplicateReview.legacyDuplicate
+      : null);
   return {
     content: candidateContent,
-    decision: duplicateCloseDecision(
-      duplicateReview.strictDuplicate,
-      candidate,
-    ),
+    decision: duplicateCloseDecision(hardCloseDuplicate, candidate),
     duplicateReview: summarizeDuplicateReview(duplicateReview),
     sourceEvidence,
   };
