@@ -1942,6 +1942,16 @@ ${urls}
       "directContentReviewabilityForTarget(",
     );
     const applyIndex = pullRequestBlock.indexOf("applyUnderReviewToTarget");
+    const shouldInspectBlock = source.slice(
+      source.indexOf("async function shouldInspectPullRequestFilesForWebhook"),
+      source.indexOf("function reviewTargetFromPullPayload"),
+    );
+    const reopenedClosedIndex = shouldInspectBlock.indexOf(
+      'existingStatus === "closed"',
+    );
+    const reviewKeySkipIndex = shouldInspectBlock.indexOf(
+      "return !reviewScanKey || existingReviewKey !== reviewScanKey",
+    );
 
     expect(source).toContain('reason: "No source content entry file changed."');
     expect(source).toContain("function recordReviewedScanKey");
@@ -1956,6 +1966,11 @@ ${urls}
     expect(source).toContain(
       "resetAttemptCount: shouldResetManualTerminal || shouldResetTerminalState",
     );
+    expect(source).toContain('existingStatus === "closed"');
+    expect(source).toContain(
+      'isReopenedPullRequestEvent(String(eventName || ""), webhook)',
+    );
+    expect(source).toContain("eventName,");
     expect(source).toContain("clearTerminal:");
     expect(source).toContain("lastReviewKey: reviewScanKey || undefined");
     expect(source).toContain('reason: "already_reviewed"');
@@ -1966,6 +1981,8 @@ ${urls}
     expect(inspectIndex).toBeGreaterThan(0);
     expect(classifyIndex).toBeGreaterThan(inspectIndex);
     expect(applyIndex).toBeGreaterThan(classifyIndex);
+    expect(reopenedClosedIndex).toBeGreaterThan(0);
+    expect(reviewKeySkipIndex).toBeGreaterThan(reopenedClosedIndex);
   });
 
   it("cleans stale gate metadata when webhook paths ignore former content PRs", () => {
