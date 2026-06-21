@@ -1,6 +1,12 @@
 import { normalizePlatform } from "@heyclaude/registry";
 import type { SearchDocument } from "@heyclaude/registry";
 
+import {
+  normalizeSearchQuery,
+  TOKEN_SPLIT_PATTERN,
+  tokenizeSearchQuery,
+} from "@/lib/search-query-tokenization";
+
 export type BooleanFilterValue = "all" | "true" | "false";
 
 export type DownloadTrustFilterValue = "all" | "first-party" | "external" | "none";
@@ -32,7 +38,6 @@ export type RegistrySearchFilterDimension =
   | "claimStatus"
   | "sourceStatus";
 
-const TOKEN_SPLIT_PATTERN = /[^a-z0-9+#.-]+/i;
 const QUERY_ALIASES: Record<string, string[]> = {
   automation: ["automate", "automated", "qa", "testing"],
   browser: ["chrome", "playwright", "web"],
@@ -155,14 +160,6 @@ const SEARCH_REASON_PRIORITY = [
   "installable",
   "reviewed",
 ];
-
-function tokenizeSearchQuery(query: string) {
-  return query
-    .split(TOKEN_SPLIT_PATTERN)
-    .map((token) => token.trim().toLowerCase())
-    .filter((token) => token.length >= 2)
-    .slice(0, 12);
-}
 
 function expandedTokenCandidates(token: string) {
   return [token, ...(QUERY_ALIASES[token] ?? [])];
@@ -308,7 +305,7 @@ function rankedSearchReasons(reasons: ReadonlySet<string>) {
 }
 
 export function matchesQuery(entry: SearchDocument, query: string) {
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = normalizeSearchQuery(query);
   if (!normalizedQuery) return true;
   const haystack = normalizedSearchText(entry);
   const tokens = tokenizeSearchQuery(normalizedQuery);
@@ -436,7 +433,7 @@ export function scoreSearchEntry(
   entry: SearchDocument,
   query: string,
 ): Omit<RankedSearchEntry, "entry"> {
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = normalizeSearchQuery(query);
   const tokens = tokenizeSearchQuery(normalizedQuery);
   if (!tokens.length) return { score: 0, reasons: [] };
 
