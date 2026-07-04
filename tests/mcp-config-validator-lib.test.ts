@@ -8,10 +8,10 @@ import {
   commandName,
   extractServers,
   firstPackageOperand,
+  isLocalMcpHost,
   isRecord,
   packageFromRunner,
   packageRunnerName,
-  isLoopbackMcpHost,
   redactArgValue,
   redactEnvValue,
   redactUrlValue,
@@ -305,16 +305,11 @@ describe("MCP config validator lib", () => {
       }
     });
 
-    it("recognizes loopback MCP hostnames", () => {
-      for (const hostname of [
-        "localhost",
-        "127.0.0.1",
-        "[::1]",
-        "0.0.0.0",
-      ]) {
-        expect(isLoopbackMcpHost(hostname), hostname).toBe(true);
+    it("recognizes local MCP hostnames including 0.0.0.0", () => {
+      for (const hostname of ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"]) {
+        expect(isLocalMcpHost(hostname), hostname).toBe(true);
       }
-      expect(isLoopbackMcpHost("example.com")).toBe(false);
+      expect(isLocalMcpHost("example.com")).toBe(false);
     });
 
     it("flags invalid names, missing transport, and shell pipelines", () => {

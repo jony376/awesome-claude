@@ -23,19 +23,7 @@ const SENSITIVE_SPLIT_ARG_KEYS = new Set([
   "x_api_key",
   "xapikey",
 ]);
-
-// Keep loopback host detection aligned with submission-risk/content-policy
-// exemptions so local MCP dev URLs do not get false HTTPS warnings.
-const LOOPBACK_MCP_HOSTNAMES = new Set([
-  "127.0.0.1",
-  "localhost",
-  "[::1]",
-  "0.0.0.0",
-]);
-
-export function isLoopbackMcpHost(hostname: string) {
-  return LOOPBACK_MCP_HOSTNAMES.has(hostname);
-}
+const LOCAL_MCP_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]", "0.0.0.0"]);
 
 export type McpConfigServerReport = {
   name: string;
@@ -326,6 +314,10 @@ export function packageFromRunner(command: string, args: string[]) {
   return "";
 }
 
+export function isLocalMcpHost(hostname: string) {
+  return LOCAL_MCP_HOSTNAMES.has(hostname);
+}
+
 export function extractServers(payload: unknown) {
   if (!isRecord(payload)) {
     return { servers: {}, rootError: "Config must be a JSON object." };
@@ -419,7 +411,7 @@ export function validateServer(name: string, raw: unknown) {
   if (url) {
     try {
       const parsed = new URL(url);
-      const isLocal = isLoopbackMcpHost(parsed.hostname);
+      const isLocal = isLocalMcpHost(parsed.hostname);
       if (parsed.protocol !== "https:" && !(isLocal && parsed.protocol === "http:")) {
         warnings.push("Remote MCP URLs should use HTTPS unless they are localhost.");
       }

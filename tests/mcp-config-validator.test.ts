@@ -518,7 +518,7 @@ describe("MCP config validator", () => {
     expect(JSON.parse(result.fixedConfigText)).toHaveProperty("mcpServers");
   });
 
-  it("treats http://[::1] and http://0.0.0.0 as loopback localhost", () => {
+  it("treats http://[::1] and http://0.0.0.0 as local development hosts", () => {
     const httpsWarning =
       "Remote MCP URLs should use HTTPS unless they are localhost.";
 
