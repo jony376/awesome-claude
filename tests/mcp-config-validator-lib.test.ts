@@ -11,6 +11,7 @@ import {
   isRecord,
   packageFromRunner,
   packageRunnerName,
+  isLoopbackMcpHost,
   redactArgValue,
   redactEnvValue,
   redactUrlValue,
@@ -296,11 +297,24 @@ describe("MCP config validator lib", () => {
       for (const url of [
         "http://localhost:3000/sse",
         "http://127.0.0.1:3000/sse",
+        "http://0.0.0.0:3000/mcp",
       ]) {
         expect(validateServer("loopback", { url }).warnings).not.toContain(
           "Remote MCP URLs should use HTTPS unless they are localhost.",
         );
       }
+    });
+
+    it("recognizes loopback MCP hostnames", () => {
+      for (const hostname of [
+        "localhost",
+        "127.0.0.1",
+        "[::1]",
+        "0.0.0.0",
+      ]) {
+        expect(isLoopbackMcpHost(hostname), hostname).toBe(true);
+      }
+      expect(isLoopbackMcpHost("example.com")).toBe(false);
     });
 
     it("flags invalid names, missing transport, and shell pipelines", () => {
