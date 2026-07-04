@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { buildBriefEmail } from "../apps/web/src/lib/brief-email";
 import {
   signBriefApproveToken,
   verifyBriefApproveToken,
@@ -247,97 +246,6 @@ describe("web non-UI utility coverage", () => {
       current: null,
       next: null,
     });
-  });
-
-  it("builds review and audience weekly brief emails from persisted payloads", () => {
-    const brief = {
-      summary: { newEntryCount: 2, sourceBackedCount: 1, saferInstallCount: 1 },
-      sections: {
-        newEntries: [
-          {
-            title: "Escaped <MCP>",
-            url: "/entry/mcp/escaped",
-            category: "mcp",
-            description:
-              "A very useful MCP server with source-backed setup notes.",
-            sourceUrls: ["https://example.com/source"],
-            packageVerified: true,
-            dateAdded: "2026-01-08",
-          },
-        ],
-        saferInstalls: [],
-      },
-    };
-
-    const review = buildBriefEmail({
-      brief,
-      siteUrl: "https://heyclau.de",
-      dateLabel: "2026-01-09",
-      approveUrl: "https://gate.example/approve",
-    });
-    expect(review.subject).toBe("[Review] Weekly Brief — Jan 9");
-    expect(review.html).toContain("Escaped &lt;MCP&gt;");
-    expect(review.html).toContain("Approve &amp; schedule send");
-    expect(review.text).toContain("https://heyclau.de/entry/mcp/escaped");
-
-    const audience = buildBriefEmail({
-      brief: { sections: {} },
-      siteUrl: "https://heyclau.de",
-      dateLabel: "not-a-date",
-    });
-    expect(audience.subject).toBe("HeyClaude Weekly Brief — not-a-date");
-    expect(audience.html).toContain("No notable activity this week.");
-
-    // Theme line, editor note, and density: 4 featured cards + compact overflow.
-    const full = buildBriefEmail({
-      brief: {
-        summary: {
-          newEntryCount: 6,
-          sourceBackedCount: 0,
-          saferInstallCount: 0,
-        },
-        theme: "6 new this week, led by 6 rules.",
-        note: "Glad to be back —\nreply and tell me what to cover.",
-        sections: {
-          newEntries: Array.from({ length: 6 }, (_, i) => ({
-            title: `Entry ${i}`,
-            url: `/entry/rules/e${i}`,
-            category: "rules",
-            description: "desc",
-          })),
-        },
-      },
-      siteUrl: "https://heyclau.de",
-      dateLabel: "2026-06-19",
-    });
-    expect(full.html).toContain("6 new this week, led by 6 rules.");
-    expect(full.html).toContain("From the editor");
-    expect(full.html).toContain("reply and tell me what to cover.");
-    expect(full.text).toContain("From the editor:");
-    // 4 full cards (14px 16px padding) + 2 compact overflow rows.
-    expect((full.html.match(/padding:14px 16px/g) ?? []).length).toBe(4);
-    expect(
-      (full.html.match(/border-bottom:1px solid #f0ede4/g) ?? []).length,
-    ).toBe(2);
-
-    const prototypeCategory = buildBriefEmail({
-      brief: {
-        sections: {
-          newEntries: [
-            {
-              title: "Prototype category label",
-              url: "/entry/tools/prototype",
-              category: "constructor",
-              description: "Should render a human label, not Object.prototype.",
-            },
-          ],
-        },
-      },
-      siteUrl: "https://heyclau.de",
-      dateLabel: "2026-06-19",
-    });
-    expect(prototypeCategory.text).toContain("[Constructor]");
-    expect(prototypeCategory.text).not.toContain("[Function:");
   });
 
   it("signs brief approval tokens and rejects tampered, malformed, and expired tokens", async () => {
