@@ -113,12 +113,18 @@ describe("MCP install config helpers", () => {
       }),
     ).toBeNull();
 
-    expect(
-      mcpInstallTargetsForConfig({
-        type: "http",
-        url: "http://127.0.0.1:3000/mcp",
-      }),
-    ).toEqual(targets);
+    for (const url of [
+      "http://127.0.0.1:3000/mcp",
+      "http://0.0.0.0:3000/mcp",
+    ]) {
+      expect(
+        mcpInstallTargetsForConfig({
+          type: "http",
+          url,
+        }),
+        url,
+      ).toEqual(targets);
+    }
     expect(
       mcpInstallTargetsForConfig({
         type: "sse",
