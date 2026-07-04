@@ -1,7 +1,13 @@
 export const DEFAULT_REMOTE_MCP_URL = "https://heyclau.de/api/mcp";
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 
-const localHosts = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+const localHosts = new Set([
+  "127.0.0.1",
+  "localhost",
+  "::1",
+  "[::1]",
+  "0.0.0.0",
+]);
 
 export function normalizeEndpointUrl(value = DEFAULT_REMOTE_MCP_URL) {
   const raw = String(value || "").trim();
