@@ -16,7 +16,7 @@ import {
   summarizeProvenanceCoverage,
   summarizeRiskBearingTotals,
   toSafePathSegment,
-} from "../apps/web/src/lib/quality-dashboard";
+} from "@/lib/quality-dashboard-lib";
 
 interface CategoryBreakdownInput {
   count: number;
@@ -461,5 +461,35 @@ describe("path segment encoding", () => {
     expect(buildEntryHref("mcp", "context7")).toBe("/mcp/context7");
     expect(buildEntryHref("a/b", "c d")).toBe("/a%2Fb/c%20d");
     expect(buildEntryHref("mcp", "../escape")).toBe("/mcp/..%2Fescape");
+  });
+});
+
+describe("quality-dashboard-lib edge cases", () => {
+  it("returns empty gap lists when limit is zero", () => {
+    const report = makeReport({
+      entries: [trustEntry({ category: "mcp", slug: "a" })],
+      categoryBreakdown: {},
+    });
+    const gaps = findSafetyPrivacyGaps(report, 0);
+    expect(gaps.missingSafetyNotes).toEqual([]);
+    expect(gaps.missingPrivacyNotes).toEqual([]);
+  });
+
+  it("handles missing entries and category breakdown arrays", () => {
+    const report = makeReport({
+      entries: [],
+      categoryBreakdown: {},
+    });
+    report.entries = undefined as unknown as RegistryTrustReportEntry[];
+    report.categoryBreakdown =
+      undefined as unknown as RegistryTrustReport["categoryBreakdown"];
+
+    expect(buildCategoryTrustRows(report)).toEqual([]);
+    expect(summarizeProvenanceCoverage(report)).toMatchObject({
+      totalEntries: 0,
+      provenancePercent: 0,
+      sourcePercent: 0,
+      missingSourceCount: 0,
+    });
   });
 });
