@@ -1,14 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import {
   getTrustReasons,
   installRiskLevel,
+  INSTALL_RISK_DETAIL,
   INSTALL_RISK_LABEL,
   summarizeTrust,
+} from "@/lib/trust-lib";
+import {
+  getTrustReasons as getTrustReasonsFromWrapper,
+  installRiskLevel as installRiskLevelFromWrapper,
 } from "@/lib/trust";
 import type { Entry } from "@/types/registry";
 
-// Minimal entry factory — only the fields trust.ts reads matter; the cast keeps
-// the table-driven cases terse without reconstructing the whole Entry shape.
 function entry(overrides: Partial<Entry> = {}): Entry {
   return {
     category: "skills",
@@ -26,7 +30,7 @@ function entry(overrides: Partial<Entry> = {}): Entry {
 const byId = (reasons: ReturnType<typeof getTrustReasons>, id: string) =>
   reasons.find((r) => r.id === id);
 
-describe("getTrustReasons", () => {
+describe("trust-lib getTrustReasons", () => {
   it("always emits the six core reasons", () => {
     const reasons = getTrustReasons(entry());
     for (const id of ["trust-level", "source", "claim", "reviewed", "safety", "privacy"]) {
@@ -53,18 +57,29 @@ describe("getTrustReasons", () => {
       "ok",
     );
     expect(byId(getTrustReasons(entry({ source: "external" })), "source")?.severity).toBe("info");
-    // An unknown / missing provenance is a warning.
     expect(
       byId(getTrustReasons(entry({ source: "community" as Entry["source"] })), "source")?.severity,
     ).toBe("warning");
   });
 
-  it("treats safetyNotesList as equivalent to safetyNotes", () => {
+  it("links repository metadata on the source reason when available", () => {
+    const reason = byId(
+      getTrustReasons(entry({ sourceUrl: "https://github.com/example/repo" })),
+      "source",
+    );
+    expect(reason?.sourceHref).toBe("https://github.com/example/repo");
+    expect(reason?.sourceLabel).toBe("Repository");
+  });
+
+  it("treats safetyNotesList and privacyNotesList as equivalent to string notes", () => {
     expect(byId(getTrustReasons(entry({ safetyNotes: "runs a worker" })), "safety")?.severity).toBe(
       "ok",
     );
     expect(
       byId(getTrustReasons(entry({ safetyNotesList: ["touches ~/.ssh"] })), "safety")?.severity,
+    ).toBe("ok");
+    expect(
+      byId(getTrustReasons(entry({ privacyNotesList: ["no telemetry"] })), "privacy")?.severity,
     ).toBe("ok");
     expect(byId(getTrustReasons(entry()), "safety")?.severity).toBe("warning");
   });
@@ -100,7 +115,7 @@ describe("getTrustReasons", () => {
   });
 });
 
-describe("summarizeTrust", () => {
+describe("trust-lib summarizeTrust", () => {
   it("counts every reason exactly once across severities", () => {
     const reasons = getTrustReasons(
       entry({ trust: "blocked", source: "external", packageVerified: false }),
@@ -111,8 +126,7 @@ describe("summarizeTrust", () => {
   });
 });
 
-describe("installRiskLevel", () => {
-  // A fully clean, trusted entry with no freshness timestamp -> no warnings.
+describe("trust-lib installRiskLevel", () => {
   const lowEntry = () =>
     entry({
       trust: "trusted",
@@ -145,14 +159,23 @@ describe("installRiskLevel", () => {
     expect(installRiskLevel({ ...lowEntry(), packageVerified: false } as Entry)).toBe("review");
   });
 
-  it("exposes a label for every risk level", () => {
-    expect(INSTALL_RISK_LABEL.low).toBeTruthy();
-    expect(INSTALL_RISK_LABEL.review).toBeTruthy();
-    expect(INSTALL_RISK_LABEL.high).toBeTruthy();
+  it("exposes labels and details for every risk level", () => {
+    expect(INSTALL_RISK_LABEL.low).toBe("Low risk");
+    expect(INSTALL_RISK_LABEL.review).toBe("Review first");
+    expect(INSTALL_RISK_LABEL.high).toBe("High risk");
+    expect(INSTALL_RISK_DETAIL.low).toContain("Source-backed");
+    expect(INSTALL_RISK_DETAIL.review).toContain("safety notes");
+    expect(INSTALL_RISK_DETAIL.high).toContain("human review");
+  });
+
+  it("keeps the public wrapper re-export aligned with the lib module", () => {
+    const sample = lowEntry();
+    expect(getTrustReasonsFromWrapper(sample)).toEqual(getTrustReasons(sample));
+    expect(installRiskLevelFromWrapper(sample)).toBe(installRiskLevel(sample));
   });
 });
 
-describe("freshness 60-day boundary", () => {
+describe("trust-lib freshness 60-day boundary", () => {
   const NOW = new Date("2026-06-13T00:00:00.000Z");
   const daysAgo = (n: number) => new Date(NOW.getTime() - n * 86_400_000).toISOString();
 
