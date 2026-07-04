@@ -854,6 +854,13 @@ describe("Raycast feed helpers", () => {
       }),
       ["claude-code", "codex", "cursor", "antigravity"],
     );
+    assert.deepEqual(
+      mcpInstallTargetsForConfig({
+        type: "http",
+        url: "http://0.0.0.0:3845/mcp",
+      }),
+      ["claude-code", "codex", "cursor", "antigravity"],
+    );
     assert.throws(
       () =>
         buildMcpInstallPlan("claude-code", sampleEntry, {
