@@ -23,7 +23,6 @@ const SENSITIVE_SPLIT_ARG_KEYS = new Set([
   "x_api_key",
   "xapikey",
 ]);
-const LOCAL_MCP_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]", "0.0.0.0"]);
 
 export type McpConfigServerReport = {
   name: string;
@@ -315,7 +314,15 @@ export function packageFromRunner(command: string, args: string[]) {
 }
 
 export function isLocalMcpHost(hostname: string) {
-  return LOCAL_MCP_HOSTNAMES.has(hostname);
+  const host = hostname
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host === "::1" || host === "0.0.0.0") {
+    return true;
+  }
+  const ipv4 = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  return Boolean(ipv4 && Number(ipv4[1]) === 127);
 }
 
 export function extractServers(payload: unknown) {

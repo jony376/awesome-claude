@@ -297,6 +297,8 @@ describe("MCP config validator lib", () => {
       for (const url of [
         "http://localhost:3000/sse",
         "http://127.0.0.1:3000/sse",
+        "http://127.0.0.2:3000/sse",
+        "http://127.1.0.1:3000/mcp",
         "http://0.0.0.0:3000/mcp",
       ]) {
         expect(validateServer("loopback", { url }).warnings).not.toContain(
@@ -305,11 +307,20 @@ describe("MCP config validator lib", () => {
       }
     });
 
-    it("recognizes local MCP hostnames including 0.0.0.0", () => {
-      for (const hostname of ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"]) {
+    it("recognizes local MCP hostnames including full 127.0.0.0/8 loopback", () => {
+      for (const hostname of [
+        "localhost",
+        "127.0.0.1",
+        "127.0.0.2",
+        "127.1.0.1",
+        "127.255.255.255",
+        "[::1]",
+        "0.0.0.0",
+      ]) {
         expect(isLocalMcpHost(hostname), hostname).toBe(true);
       }
       expect(isLocalMcpHost("example.com")).toBe(false);
+      expect(isLocalMcpHost("128.0.0.1")).toBe(false);
     });
 
     it("flags invalid names, missing transport, and shell pipelines", () => {
