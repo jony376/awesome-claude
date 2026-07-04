@@ -2,16 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildHooksReport,
+  complexityDistribution,
   hookEventDistribution,
   hookEventOf,
   HOOK_EVENTS,
-} from "../apps/web/src/lib/hooks-stats";
-import {
-  buildReportDataset,
-  REPORT_PATHS,
-} from "../apps/web/src/lib/data-reports";
-import { ENTRIES, REGISTRY_GENERATED_AT } from "../apps/web/src/data/entries";
-import type { Entry } from "../apps/web/src/types/registry";
+  prerequisiteDistribution,
+  useCaseDistribution,
+} from "@/lib/hooks-stats-lib";
+import { buildHooksReport as buildHooksReportFromWrapper } from "@/lib/hooks-stats";
+import { buildReportDataset, REPORT_PATHS } from "@/lib/data-reports";
+import { ENTRIES, REGISTRY_GENERATED_AT } from "@/data/entries";
+import type { Entry } from "@/types/registry";
 
 function hook(partial: Partial<Entry>): Entry {
   return {
@@ -22,9 +23,10 @@ function hook(partial: Partial<Entry>): Entry {
   } as Entry;
 }
 
-describe("hook event classification", () => {
+describe("hooks-stats-lib hook event classification", () => {
   it("reads the trigger field, defaulting to Unspecified", () => {
     expect(hookEventOf(hook({ trigger: "PostToolUse" }))).toBe("PostToolUse");
+    expect(hookEventOf(hook({ trigger: "  Stop  " }))).toBe("Stop");
     expect(hookEventOf(hook({}))).toBe("Unspecified");
   });
 
@@ -37,13 +39,74 @@ describe("hook event classification", () => {
     ];
     const { rows, total, distinct } = hookEventDistribution(hooks);
     expect(total).toBe(4);
-    expect(distinct).toBe(2); // Unspecified does not count as a covered event
+    expect(distinct).toBe(2);
     expect(rows[0]).toEqual({ label: "PostToolUse", count: 2, pct: 50 });
     expect(rows[rows.length - 1].label).toBe("Unspecified");
   });
+
+  it("treats unknown trigger labels as lifecycle tail ordering", () => {
+    const hooks = [
+      hook({ trigger: "CustomEvent" }),
+      hook({ trigger: "CustomEvent" }),
+      hook({ trigger: "Stop" }),
+    ];
+    const { rows } = hookEventDistribution(hooks);
+    expect(rows[0].label).toBe("CustomEvent");
+    expect(rows[1].label).toBe("Stop");
+  });
+
+  it("exposes the canonical hook lifecycle order constant", () => {
+    expect(HOOK_EVENTS).toEqual([
+      "PreToolUse",
+      "PostToolUse",
+      "UserPromptSubmit",
+      "Notification",
+      "Stop",
+      "SubagentStop",
+      "SessionStart",
+    ]);
+  });
 });
 
-describe("buildHooksReport (deterministic)", () => {
+describe("hooks-stats-lib use case and complexity distributions", () => {
+  it("excludes mechanism tags from use-case distribution", () => {
+    const hooks = [
+      hook({ tags: ["hooks", "testing", "claude-code", "ci"] }),
+      hook({ tags: ["CI", "testing"] }),
+    ];
+    const rows = useCaseDistribution(hooks, 10);
+    expect(rows.map((row) => row.label)).toEqual(["ci", "testing"]);
+    expect(rows.find((row) => row.label === "hooks")).toBeUndefined();
+  });
+
+  it("omits unscored hooks from complexity distribution", () => {
+    const hooks = [
+      hook({ difficultyScore: 1 }),
+      hook({ difficultyScore: 4 }),
+      hook({}),
+    ];
+    const rows = complexityDistribution(hooks);
+    expect(rows.map((row) => row.label)).toEqual([
+      "Simple (score 1–2)",
+      "Moderate (score 3–4)",
+    ]);
+  });
+
+  it("reports prerequisite buckets when both are present", () => {
+    const hooks = [
+      hook({ prerequisites: ["API key"] }),
+      hook({ hasPrerequisites: true }),
+      hook({}),
+    ];
+    const rows = prerequisiteDistribution(hooks);
+    expect(rows).toEqual([
+      { label: "Requires prerequisites", count: 2, pct: 67 },
+      { label: "No prerequisites", count: 1, pct: 33 },
+    ]);
+  });
+});
+
+describe("hooks-stats-lib buildHooksReport (deterministic)", () => {
   const sample = [
     hook({
       trigger: "PostToolUse",
@@ -58,17 +121,17 @@ describe("buildHooksReport (deterministic)", () => {
   it("produces stable totals, stats, and an events dimension", () => {
     const a = buildHooksReport(sample, "2026-06-20");
     const b = buildHooksReport(sample, "2026-06-20");
-    expect(a).toEqual(b); // deterministic
+    expect(a).toEqual(b);
 
     expect(a.total).toBe(4);
     expect(a.slug).toBe("/state-of-claude-code-hooks");
+    expect(a.exportSlug).toBe("claude-code-hooks");
     const events = a.dimensions.find((d) => d.key === "hook-events");
     expect(events?.rows[0].label).toBe("PostToolUse");
     expect(a.stats.find((s) => s.key === "total")?.value).toBe(4);
   });
 
   it("drops degenerate single-bucket dimensions", () => {
-    // all identical trust/source -> only the events dimension survives
     const uniform = [
       hook({ trigger: "PostToolUse" }),
       hook({ trigger: "Stop" }),
@@ -79,9 +142,25 @@ describe("buildHooksReport (deterministic)", () => {
     }
     expect(model.dimensions.some((d) => d.key === "hook-events")).toBe(true);
   });
+
+  it("returns an empty report when the registry has no hooks", () => {
+    const model = buildHooksReport(
+      [hook({ category: "skills", trigger: "Stop" }) as Entry],
+      "2026-06-20",
+    );
+    expect(model.total).toBe(0);
+    expect(model.dimensions).toEqual([]);
+    expect(model.stats.find((s) => s.key === "total")?.value).toBe(0);
+  });
+
+  it("keeps the public wrapper re-export aligned with the lib module", () => {
+    const fromLib = buildHooksReport(sample, "2026-06-20");
+    const fromWrapper = buildHooksReportFromWrapper(sample, "2026-06-20");
+    expect(fromWrapper).toEqual(fromLib);
+  });
 });
 
-describe("report Dataset JSON-LD", () => {
+describe("hooks-stats-lib report Dataset JSON-LD", () => {
   const model = buildHooksReport(
     [
       hook({ trigger: "PostToolUse" }),
@@ -99,19 +178,18 @@ describe("report Dataset JSON-LD", () => {
     for (const stat of model.stats) expect(measured).toContain(stat.label);
     for (const dimension of model.dimensions)
       expect(measured).toContain(dimension.title);
-    // de-duplicated
     expect(new Set(measured).size).toBe(measured.length);
   });
 });
 
-describe("sitemap manifest", () => {
+describe("hooks-stats-lib sitemap manifest", () => {
   it("lists the new report so it gets indexed", () => {
     expect(REPORT_PATHS).toContain("/state-of-claude-code-hooks");
-    expect(new Set(REPORT_PATHS).size).toBe(REPORT_PATHS.length); // no dupes
+    expect(new Set(REPORT_PATHS).size).toBe(REPORT_PATHS.length);
   });
 });
 
-describe("real registry data", () => {
+describe("hooks-stats-lib real registry data", () => {
   const asOf = String(REGISTRY_GENERATED_AT).slice(0, 10);
   const model = buildHooksReport(ENTRIES, asOf);
 
@@ -127,12 +205,5 @@ describe("real registry data", () => {
     for (const dimension of model.dimensions) {
       expect(dimension.rows.length).toBeGreaterThan(1);
     }
-    // eslint-disable-next-line no-console
-    console.log(
-      "hooks report dimensions:",
-      model.dimensions.map((d) => `${d.key}(${d.rows.length})`).join(", "),
-      "| stats:",
-      model.stats.map((s) => `${s.key}=${s.value}`).join(", "),
-    );
   });
 });
