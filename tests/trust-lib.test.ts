@@ -13,6 +13,8 @@ import {
 } from "@/lib/trust";
 import type { Entry } from "@/types/registry";
 
+// Minimal entry factory — only the fields trust.ts reads matter; the cast keeps
+// the table-driven cases terse without reconstructing the whole Entry shape.
 function entry(overrides: Partial<Entry> = {}): Entry {
   return {
     category: "skills",
