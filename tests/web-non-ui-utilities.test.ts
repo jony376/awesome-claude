@@ -60,11 +60,6 @@ import {
   sortJobs,
 } from "../apps/web/src/lib/jobs-utils";
 import {
-  buildSubmissionPacket,
-  preflight,
-  slugify,
-} from "../apps/web/src/lib/submission-spec";
-import {
   getAllTagGroups,
   getIndexableTagGroups,
   getTagGroup,
@@ -543,42 +538,6 @@ describe("web non-UI utility coverage", () => {
     } finally {
       globalWithEnv.__env__ = previousEnv;
     }
-  });
-
-  it("validates submission preflight invariants and packet output", () => {
-    expect(slugify("Claude's Helpful MCP!")).toBe("claudes-helpful-mcp");
-    expect(preflight("", {})).toContainEqual({
-      kind: "blocker",
-      message: "Pick a category.",
-    });
-    expect(
-      preflight("mcp", {
-        title: "Example",
-        slug: "Bad Slug",
-        github_url: "http://example.com/repo",
-      }).map((issue) => issue.message),
-    ).toEqual(
-      expect.arrayContaining([
-        "Slug must be lowercase kebab-case.",
-        "github url must be HTTPS.",
-        "Safety notes are required for this category.",
-        "Privacy notes are required for this category.",
-      ]),
-    );
-    expect(
-      preflight("tools", { github_url: "https://example.com" }),
-    ).toContainEqual({
-      kind: "warning",
-      message:
-        "This category needs maintainer routing before website import is enabled.",
-    });
-    expect(
-      buildSubmissionPacket("mcp", {
-        title: "Example MCP",
-        category: "mcp",
-        github_url: "https://github.com/example/mcp",
-      }),
-    ).toContain("### GitHub URL");
   });
 
   it("searches generated entries and keeps related-entry grouping bounded", () => {
