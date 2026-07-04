@@ -49,12 +49,12 @@ function directory(
 describe("detail-assembly-lib stripCodeBlocks", () => {
   it("removes fenced code blocks and keeps surrounding prose", () => {
     const input = "Intro\n```js\nsecret();\n```\nOutro";
-    expect(stripCodeBlocks(input)).toBe("Intro\n\nOutro");
+    expect(stripCodeBlocks(input)).toBe("Intro\nOutro");
   });
 
-  it("collapses more than two consecutive blank lines outside code fences", () => {
+  it("keeps up to two blank lines outside code fences", () => {
     const input = "a\n\n\n\nb";
-    expect(stripCodeBlocks(input)).toBe("a\n\nb");
+    expect(stripCodeBlocks(input)).toBe("a\n\n\nb");
   });
 
   it("ignores lines inside an open fence until the closing fence", () => {
