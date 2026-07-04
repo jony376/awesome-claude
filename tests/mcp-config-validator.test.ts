@@ -518,16 +518,18 @@ describe("MCP config validator", () => {
     expect(JSON.parse(result.fixedConfigText)).toHaveProperty("mcpServers");
   });
 
-  it("treats http://[::1] IPv6 loopback as localhost", () => {
+  it("treats http://[::1] and http://0.0.0.0 as local development hosts", () => {
     const httpsWarning =
       "Remote MCP URLs should use HTTPS unless they are localhost.";
 
-    const loopback = validateMcpConfigText(
-      JSON.stringify({
-        mcpServers: { local: { url: "http://[::1]:3000/sse" } },
-      }),
-    );
-    expect(loopback.warnings).not.toContain(`local: ${httpsWarning}`);
+    for (const url of ["http://[::1]:3000/sse", "http://0.0.0.0:3000/mcp"]) {
+      const loopback = validateMcpConfigText(
+        JSON.stringify({
+          mcpServers: { local: { url } },
+        }),
+      );
+      expect(loopback.warnings, url).not.toContain(`local: ${httpsWarning}`);
+    }
 
     const remote = validateMcpConfigText(
       JSON.stringify({

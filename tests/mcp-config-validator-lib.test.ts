@@ -8,6 +8,7 @@ import {
   commandName,
   extractServers,
   firstPackageOperand,
+  isLocalMcpHost,
   isRecord,
   packageFromRunner,
   packageRunnerName,
@@ -296,11 +297,19 @@ describe("MCP config validator lib", () => {
       for (const url of [
         "http://localhost:3000/sse",
         "http://127.0.0.1:3000/sse",
+        "http://0.0.0.0:3000/mcp",
       ]) {
         expect(validateServer("loopback", { url }).warnings).not.toContain(
           "Remote MCP URLs should use HTTPS unless they are localhost.",
         );
       }
+    });
+
+    it("recognizes local MCP hostnames including 0.0.0.0", () => {
+      for (const hostname of ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"]) {
+        expect(isLocalMcpHost(hostname), hostname).toBe(true);
+      }
+      expect(isLocalMcpHost("example.com")).toBe(false);
     });
 
     it("flags invalid names, missing transport, and shell pipelines", () => {

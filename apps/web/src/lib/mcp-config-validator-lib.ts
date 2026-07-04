@@ -23,6 +23,7 @@ const SENSITIVE_SPLIT_ARG_KEYS = new Set([
   "x_api_key",
   "xapikey",
 ]);
+const LOCAL_MCP_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]", "0.0.0.0"]);
 
 export type McpConfigServerReport = {
   name: string;
@@ -313,6 +314,10 @@ export function packageFromRunner(command: string, args: string[]) {
   return "";
 }
 
+export function isLocalMcpHost(hostname: string) {
+  return LOCAL_MCP_HOSTNAMES.has(hostname);
+}
+
 export function extractServers(payload: unknown) {
   if (!isRecord(payload)) {
     return { servers: {}, rootError: "Config must be a JSON object." };
@@ -406,12 +411,7 @@ export function validateServer(name: string, raw: unknown) {
   if (url) {
     try {
       const parsed = new URL(url);
-      const isLocal =
-        parsed.hostname === "localhost" ||
-        parsed.hostname === "127.0.0.1" ||
-        // URL.hostname returns IPv6 hosts wrapped in brackets, so the loopback
-        // address surfaces as "[::1]" (never the bare "::1").
-        parsed.hostname === "[::1]";
+      const isLocal = isLocalMcpHost(parsed.hostname);
       if (parsed.protocol !== "https:" && !(isLocal && parsed.protocol === "http:")) {
         warnings.push("Remote MCP URLs should use HTTPS unless they are localhost.");
       }
