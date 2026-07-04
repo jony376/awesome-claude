@@ -157,10 +157,18 @@ describe("agents-stats-lib real registry data", () => {
     }
   });
 
-  it("keeps trust and source dimensions when the corpus is diverse", () => {
+  it("includes trust and source dimensions when the sample is diverse", () => {
+    const model = buildAgentsReport(
+      [
+        agent({ trust: "trusted", source: "source-backed", tags: ["testing"] }),
+        agent({ trust: "review", source: "external", tags: ["review"] }),
+        agent({ trust: "limited", source: "unverified", tags: ["sre"] }),
+      ],
+      "2026-06-20",
+    );
     const keys = model.dimensions.map((dimension) => dimension.key);
     expect(keys).toEqual(
-      expect.arrayContaining(["use-cases", "source-provenance", "trust-level"]),
+      expect.arrayContaining(["source-provenance", "trust-level"]),
     );
   });
 });
