@@ -35,6 +35,9 @@ describe("HeyClaude MCP CLI options", () => {
     expect(normalizeEndpointUrl("http://localhost:3000").toString()).toBe(
       "http://localhost:3000/api/mcp",
     );
+    expect(normalizeEndpointUrl("http://0.0.0.0:3845").toString()).toBe(
+      "http://0.0.0.0:3845/api/mcp",
+    );
     expect(() => normalizeEndpointUrl("http://example.com")).toThrow(
       /HTTPS outside localhost/i,
     );
