@@ -44,7 +44,7 @@ function isLoopbackHostname(hostname) {
     .trim()
     .toLowerCase()
     .replace(/^\[|\]$/g, "");
-  if (host === "localhost" || host === "::1") return true;
+  if (host === "localhost" || host === "::1" || host === "0.0.0.0") return true;
   const ipv4 = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   return Boolean(ipv4 && Number(ipv4[1]) === 127);
 }

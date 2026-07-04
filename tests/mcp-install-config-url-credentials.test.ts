@@ -85,12 +85,17 @@ describe("normalizeMcpServerConfig URL credential hardening", () => {
   });
 
   it("accepts a clean loopback http URL", () => {
-    const normalized = normalizeMcpServerConfig({
-      type: "http",
-      url: "http://127.0.0.1:8080/mcp",
-    });
-    expect(normalized).not.toBeNull();
-    expect(normalized?.url).toBe("http://127.0.0.1:8080/mcp");
+    for (const url of [
+      "http://127.0.0.1:8080/mcp",
+      "http://0.0.0.0:8080/mcp",
+    ]) {
+      const normalized = normalizeMcpServerConfig({
+        type: "http",
+        url,
+      });
+      expect(normalized, url).not.toBeNull();
+      expect(normalized?.url).toBe(url);
+    }
   });
 
   it("keeps proper header-based auth working without URL credentials", () => {
