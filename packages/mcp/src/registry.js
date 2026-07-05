@@ -87,6 +87,12 @@ import {
   RESOURCE_TEMPLATES,
   listRegistryResourceTemplates,
 } from "./registry-resource-metadata-lib.js";
+import {
+  intersection,
+  normalizeDateFloor,
+  parsedTrustArgs,
+  unique,
+} from "./registry-collection-lib.js";
 
 export {
   LOCAL_DRAFT_TOOL_NAMES,
@@ -257,16 +263,6 @@ function entryMatchesTrustFilters(entry, args = {}) {
   return true;
 }
 
-function parsedTrustArgs(args = {}) {
-  return {
-    hasSafetyNotes: args.hasSafetyNotes || "all",
-    hasPrivacyNotes: args.hasPrivacyNotes || "all",
-    downloadTrust: args.downloadTrust || "all",
-    claimStatus: args.claimStatus || "all",
-    sourceStatus: args.sourceStatus || "all",
-  };
-}
-
 function toSearchResult(entry, ranking = null) {
   return {
     key: `${entry.category}:${entry.slug}`,
@@ -325,28 +321,6 @@ function entrySourceHosts(entry) {
   ]
     .map(sourceHost)
     .filter(Boolean);
-}
-
-function intersection(left = [], right = [], normalize = normalizeText) {
-  const rightValues = new Set((right || []).map(normalize).filter(Boolean));
-  return (left || [])
-    .map(normalize)
-    .filter((value, index, values) => value && values.indexOf(value) === index)
-    .filter((value) => rightValues.has(value));
-}
-
-function unique(values = []) {
-  return values.filter(
-    (value, index, list) => value && list.indexOf(value) === index,
-  );
-}
-
-function normalizeDateFloor(value) {
-  const text = String(value || "").trim();
-  if (!text) return "";
-  const timestamp = Date.parse(text);
-  if (!Number.isFinite(timestamp)) return "";
-  return new Date(timestamp).toISOString().slice(0, 10);
 }
 
 function sourceSummary(entry) {
