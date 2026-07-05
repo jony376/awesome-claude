@@ -67,6 +67,12 @@ import {
   getRegistryPrompt,
   listRegistryPrompts,
 } from "./registry-prompts-lib.js";
+import {
+  normalizeLimit,
+  normalizeOffset,
+  normalizePlatform,
+  normalizeText,
+} from "./registry-normalize-lib.js";
 
 export {
   LOCAL_DRAFT_TOOL_NAMES,
@@ -76,31 +82,6 @@ export {
 };
 
 export { PROMPT_DEFINITIONS, getRegistryPrompt, listRegistryPrompts };
-
-// Maps a slugified platform filter input to a canonical platform ID, matching
-// the canonical IDs in generated artifacts (see packages/registry platforms.js).
-const platformAliases = new Map([
-  ["claude", "claude-code"],
-  ["claude-code", "claude-code"],
-  ["claude-desktop", "claude-desktop"],
-  ["codex", "codex"],
-  ["openai", "codex"],
-  ["windsurf", "windsurf"],
-  ["gemini", "gemini"],
-  ["cursor", "cursor"],
-  ["cursor-rules", "cursor"],
-  ["vscode", "vscode"],
-  ["vs-code", "vscode"],
-  ["raycast", "raycast"],
-  ["aider", "aider"],
-  ["zed", "zed"],
-  ["continue", "continue"],
-  ["cli", "cli"],
-  ["generic-agents", "cli"],
-  ["agents", "cli"],
-  ["agents-context", "cli"],
-  ["agents-md", "cli"],
-]);
 
 function dataDirFromOptions(options = {}) {
   const envDataDir =
@@ -181,30 +162,6 @@ function unwrapEntries(payload) {
     throw new Error("Expected registry artifact envelope with entries array.");
   }
   return payload.entries;
-}
-
-function normalizeText(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase();
-}
-
-function normalizeLimit(value, fallback = 10) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return fallback;
-  return Math.max(1, Math.min(25, Math.trunc(numeric)));
-}
-
-function normalizeOffset(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.max(0, Math.min(5000, Math.trunc(numeric)));
-}
-
-function normalizePlatform(value) {
-  const normalized = normalizeText(value).replace(/[^a-z0-9]+/g, "-");
-  if (!normalized) return "";
-  return platformAliases.get(normalized) || String(value || "").trim();
 }
 
 function entryMatchesQuery(entry, query) {
