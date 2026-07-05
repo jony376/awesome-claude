@@ -31,8 +31,6 @@ import {
 } from "./submissions.js";
 import {
   entryClaimStatusValue,
-  entryHasPrivacyNotes,
-  entryHasSafetyNotes,
   entryPackageTrustValue,
   entrySourceStatusValue,
   matchesRegistryPlatform,
@@ -93,6 +91,10 @@ import {
   parsedTrustArgs,
   unique,
 } from "./registry-collection-lib.js";
+import {
+  entryMatchesTag,
+  entryMatchesTrustFilters,
+} from "./registry-filter-lib.js";
 
 export {
   LOCAL_DRAFT_TOOL_NAMES,
@@ -206,18 +208,6 @@ function entryMatchesPlatform(entry, platform) {
   return matchesRegistryPlatform(entry, platform);
 }
 
-function entryMatchesTag(entry, tag) {
-  if (!tag) return true;
-  return (entry.tags || []).some(
-    (candidate) => normalizeText(candidate) === tag,
-  );
-}
-
-function booleanFilterMatches(value, filter = "all") {
-  if (!filter || filter === "all") return true;
-  return filter === "true" ? Boolean(value) : !value;
-}
-
 function entryPackageTrust(entry) {
   return entryPackageTrustValue(entry);
 }
@@ -228,39 +218,6 @@ function entryClaimStatus(entry) {
 
 function entrySourceStatus(entry) {
   return entrySourceStatusValue(entry);
-}
-
-function entryMatchesTrustFilters(entry, args = {}) {
-  if (!booleanFilterMatches(entryHasSafetyNotes(entry), args.hasSafetyNotes)) {
-    return false;
-  }
-  if (
-    !booleanFilterMatches(entryHasPrivacyNotes(entry), args.hasPrivacyNotes)
-  ) {
-    return false;
-  }
-  if (
-    args.downloadTrust &&
-    args.downloadTrust !== "all" &&
-    entryPackageTrust(entry) !== args.downloadTrust
-  ) {
-    return false;
-  }
-  if (
-    args.claimStatus &&
-    args.claimStatus !== "all" &&
-    entryClaimStatus(entry) !== args.claimStatus
-  ) {
-    return false;
-  }
-  if (
-    args.sourceStatus &&
-    args.sourceStatus !== "all" &&
-    entrySourceStatus(entry) !== args.sourceStatus
-  ) {
-    return false;
-  }
-  return true;
 }
 
 function toSearchResult(entry, ranking = null) {
