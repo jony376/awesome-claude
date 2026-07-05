@@ -2535,17 +2535,21 @@ describe("HeyClaude read-only MCP helpers", () => {
         path.join(repoRoot, "packages/mcp/src/registry.js"),
         "utf8",
       );
+      const responseLibSource = fs.readFileSync(
+        path.join(repoRoot, "packages/mcp/src/registry-response-lib.js"),
+        "utf8",
+      );
 
-      const requireDocstringBefore = (declaration: string) => {
-        const index = registrySource.indexOf(declaration);
+      const requireDocstringBefore = (
+        declaration: string,
+        source = registrySource,
+      ) => {
+        const index = source.indexOf(declaration);
         expect(
           index,
           `Expected to find declaration: ${declaration}`,
         ).toBeGreaterThan(-1);
-        const preceding = registrySource.slice(
-          Math.max(0, index - 4000),
-          index,
-        );
+        const preceding = source.slice(Math.max(0, index - 4000), index);
         const trimmed = preceding.trimEnd();
         expect(
           trimmed.endsWith("*/"),
@@ -2565,7 +2569,7 @@ describe("HeyClaude read-only MCP helpers", () => {
       requireDocstringBefore("export async function listJobsActive(");
       requireDocstringBefore("async function fetchPublicApiJson(");
       requireDocstringBefore("function publicApiBaseUrl(");
-      requireDocstringBefore("function unavailable(");
+      requireDocstringBefore("export function unavailable(", responseLibSource);
       requireDocstringBefore("function toTrendingEntry(");
       requireDocstringBefore("function toJobEntry(");
       requireDocstringBefore("const DISCOVERY_RESOURCES = [");

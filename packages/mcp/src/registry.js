@@ -74,6 +74,14 @@ import {
   normalizePlatform,
   normalizeText,
 } from "./registry-normalize-lib.js";
+import {
+  invalid,
+  invalidWithDetails,
+  notFound,
+  notes,
+  unavailable,
+  withPublicPolicy,
+} from "./registry-response-lib.js";
 
 export {
   LOCAL_DRAFT_TOOL_NAMES,
@@ -326,26 +334,12 @@ function unique(values = []) {
   );
 }
 
-function notes(values) {
-  return Array.isArray(values)
-    ? values.map((value) => String(value || "").trim()).filter(Boolean)
-    : [];
-}
-
 function normalizeDateFloor(value) {
   const text = String(value || "").trim();
   if (!text) return "";
   const timestamp = Date.parse(text);
   if (!Number.isFinite(timestamp)) return "";
   return new Date(timestamp).toISOString().slice(0, 10);
-}
-
-function withPublicPolicy(result) {
-  if (!result || typeof result !== "object" || Array.isArray(result)) {
-    return result;
-  }
-  if (result.policy) return result;
-  return { ...result, policy: MCP_PUBLIC_POLICY };
 }
 
 function sourceSummary(entry) {
@@ -579,18 +573,6 @@ async function readEntry(category, slug, options = {}) {
   } catch {
     return null;
   }
-}
-
-function notFound(message) {
-  return { ok: false, error: { code: "not_found", message } };
-}
-
-function invalid(message) {
-  return { ok: false, error: { code: "invalid_request", message } };
-}
-
-function invalidWithDetails(message, details) {
-  return { ok: false, error: { code: "invalid_request", message, details } };
 }
 
 export async function searchRegistry(args = {}, options = {}) {
@@ -1710,27 +1692,6 @@ async function fetchPublicApiJson(apiPath, options = {}) {
   } finally {
     clearTimeout(timeout);
   }
-}
-
-/**
- * Build the standard "unavailable" error envelope used when a dynamic
- * resource cannot be loaded. Distinct from `notFound` / `invalid` so MCP
- * clients can tell apart "endpoint failed" from "no such resource" and
- * keep the surface read-only.
- *
- * @param {string} message Human-readable explanation.
- * @param {string} [details] Optional underlying error message.
- * @returns {{ ok: false, error: { code: "unavailable", message: string, details?: string } }}
- */
-function unavailable(message, details) {
-  return {
-    ok: false,
-    error: {
-      code: "unavailable",
-      message,
-      ...(details ? { details } : {}),
-    },
-  };
 }
 
 /**
