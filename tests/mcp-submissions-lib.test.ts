@@ -98,12 +98,13 @@ describe("submissions-lib slugify and normalization", () => {
 
 describe("submissions-lib spec validation", () => {
   it("returns schema metadata for a supported category", () => {
-    expect(getSubmissionSchemaFromSpec(submissionSpec, { category: "mcp" }))
-      .toMatchObject({
-        ok: true,
-        category: "mcp",
-        schemaVersion: submissionSpec.schemaVersion,
-      });
+    expect(
+      getSubmissionSchemaFromSpec(submissionSpec, { category: "mcp" }),
+    ).toMatchObject({
+      ok: true,
+      category: "mcp",
+      schemaVersion: submissionSpec.schemaVersion,
+    });
   });
 
   it("rejects unknown categories", () => {
@@ -198,7 +199,8 @@ describe("submissions-lib spec validation", () => {
         skill_level: "beginner",
         verified_at: "20260101",
         safety_notes: "Runs user-configured scripts in the local workspace.",
-        privacy_notes: "Does not persist user data outside the configured workspace.",
+        privacy_notes:
+          "Does not persist user data outside the configured workspace.",
       },
     });
     expect(skillResult.errors.join("\n")).toContain(
@@ -237,7 +239,9 @@ describe("submissions-lib draft builders", () => {
 
   it("prepares a full review draft with checklist metadata", () => {
     expect(
-      prepareSubmissionDraftFromSpec(submissionSpec, { fields: validMcpFields }),
+      prepareSubmissionDraftFromSpec(submissionSpec, {
+        fields: validMcpFields,
+      }),
     ).toMatchObject({
       ok: true,
       valid: true,
