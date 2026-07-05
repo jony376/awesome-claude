@@ -47,7 +47,9 @@ describe("mcp-stats-lib classifyTransport", () => {
     ).toBe("HTTP");
     expect(
       classifyTransport(
-        mk({ configSnippet: '{"transport":"streamable-http","url":"https://x/mcp"}' }),
+        mk({
+          configSnippet: '{"transport":"streamable-http","url":"https://x/mcp"}',
+        }),
       ),
     ).toBe("HTTP");
   });
@@ -61,7 +63,8 @@ describe("mcp-stats-lib classifyTransport", () => {
     expect(
       classifyTransport(
         mk({
-          installCommand: "claude mcp add --transport sse demo https://x/sse-endpoint",
+          installCommand:
+            "claude mcp add --transport sse demo https://x/sse-endpoint",
         }),
       ),
     ).toBe("SSE");
@@ -268,9 +271,7 @@ describe("mcp-stats-lib wrapper compatibility", () => {
       configSnippet: '{"command":"npx"}',
       packageVerified: true,
     });
-    expect(classifyTransportFromWrapper(entry)).toBe(
-      classifyTransport(entry),
-    );
+    expect(classifyTransportFromWrapper(entry)).toBe(classifyTransport(entry));
     expect(supplyChainCoverageFromWrapper([entry])).toEqual(
       supplyChainCoverage([entry]),
     );
