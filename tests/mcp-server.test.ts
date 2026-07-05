@@ -2539,6 +2539,13 @@ describe("HeyClaude read-only MCP helpers", () => {
         path.join(repoRoot, "packages/mcp/src/registry-response-lib.js"),
         "utf8",
       );
+      const resourceMetadataLibSource = fs.readFileSync(
+        path.join(
+          repoRoot,
+          "packages/mcp/src/registry-resource-metadata-lib.js",
+        ),
+        "utf8",
+      );
 
       const requireDocstringBefore = (
         declaration: string,
@@ -2572,7 +2579,10 @@ describe("HeyClaude read-only MCP helpers", () => {
       requireDocstringBefore("export function unavailable(", responseLibSource);
       requireDocstringBefore("function toTrendingEntry(");
       requireDocstringBefore("function toJobEntry(");
-      requireDocstringBefore("const DISCOVERY_RESOURCES = [");
+      requireDocstringBefore(
+        "export const DISCOVERY_RESOURCES = [",
+        resourceMetadataLibSource,
+      );
     });
 
     it("lists discovery resources alongside the directory and category feeds", async () => {
