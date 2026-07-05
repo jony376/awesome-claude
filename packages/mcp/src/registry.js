@@ -44,7 +44,6 @@ import {
 
 export * from "./schemas.js";
 
-const safePathPartPattern = /^[a-z0-9-]+$/;
 const jsonMimeType = "application/json";
 const DISCOVERY_RESOURCE_LIMIT = 25;
 const DISCOVERY_FETCH_TIMEOUT_MS = 5000;
@@ -93,6 +92,11 @@ import {
   parsedTrustArgs,
   unique,
 } from "./registry-collection-lib.js";
+import {
+  isSafePathPart,
+  safeRelativePath,
+  unwrapEntries,
+} from "./registry-artifact-lib.js";
 
 export {
   LOCAL_DRAFT_TOOL_NAMES,
@@ -124,21 +128,6 @@ function dataDirFromOptions(options = {}) {
     "../../..",
   );
   return path.join(repoRoot, "apps", "web", "public", "data");
-}
-
-function isSafePathPart(value) {
-  return safePathPartPattern.test(String(value || ""));
-}
-
-function safeRelativePath(relativePath) {
-  const parts = String(relativePath || "").split("/");
-  if (
-    !parts.length ||
-    parts.some((part) => !part || part === "." || part === "..")
-  ) {
-    throw new Error(`Unsafe registry artifact path: ${relativePath}`);
-  }
-  return parts.join(path.sep);
 }
 
 async function readTextArtifact(relativePath, options = {}) {
@@ -177,13 +166,6 @@ async function readJsonArtifact(relativePath, options = {}) {
   const parsed = JSON.parse(await readTextArtifact(relativePath, options));
   cache.set(cacheKey, parsed);
   return parsed;
-}
-
-function unwrapEntries(payload) {
-  if (!payload || !Array.isArray(payload.entries)) {
-    throw new Error("Expected registry artifact envelope with entries array.");
-  }
-  return payload.entries;
 }
 
 function entryMatchesQuery(entry, query) {
