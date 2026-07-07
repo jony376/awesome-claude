@@ -6,6 +6,7 @@ import {
   filterSearchEntries,
   matchesEntryQuery,
   normalizeSearchQuery,
+  search,
 } from "../apps/web/src/data/search";
 import type { Entry } from "../apps/web/src/types/registry";
 
@@ -173,5 +174,145 @@ describe("entry search filters", () => {
       packageEntry,
     ]);
     expect(countSearchResults({ signal: "reviewed" }, entries)).toBe(1);
+  });
+});
+
+describe("weighted search ranking", () => {
+  it("prefers title and slug matches over generic body mentions", () => {
+    const genericMention = entry({
+      slug: "observability-notes",
+      title: "Operational Notes",
+      description: "Mentions browser bridge once inside long documentation.",
+      tags: ["ops"],
+      keywords: ["docs"],
+      dateAdded: "2026-01-06",
+    });
+    const keywordMatch = entry({
+      slug: "automation-suite",
+      title: "Automation Suite",
+      description: "Playwright and browser automation for test workflows.",
+      tags: ["browser-automation"],
+      keywords: ["browser bridge toolkit"],
+      dateAdded: "2026-01-05",
+    });
+    const titleMatch = entry({
+      slug: "browser-bridge",
+      title: "Browser Bridge",
+      description: "Bridge Claude to a local browser session.",
+      tags: ["browser", "automation"],
+      keywords: ["playwright"],
+      dateAdded: "2026-01-04",
+    });
+
+    const ranked = search({ q: "browser bridge", sort: "popular" }, [
+      genericMention,
+      keywordMatch,
+      titleMatch,
+    ]);
+    expect(ranked.map((item) => item.slug)).toEqual([
+      "browser-bridge",
+      "automation-suite",
+      "observability-notes",
+    ]);
+  });
+
+  it("keeps recommended-score fallback when relevance ties", () => {
+    const lowerTrust = entry({
+      slug: "browser-helper-a",
+      title: "Browser Helper",
+      description: "Browser helper for Claude.",
+      source: "external",
+      dateAdded: "2026-01-01",
+    });
+    const higherTrust = entry({
+      slug: "browser-helper-b",
+      title: "Browser Helper",
+      description: "Browser helper for Claude.",
+      source: "first-party",
+      packageVerified: true,
+      safetyNotes: "Requires local browser access.",
+      privacyNotes: "Reads browser cookies.",
+      dateAdded: "2026-01-01",
+    });
+
+    const ranked = search({ q: "browser helper", sort: "popular" }, [
+      lowerTrust,
+      higherTrust,
+    ]);
+    expect(ranked[0]?.slug).toBe("browser-helper-b");
+  });
+
+  it("boosts exact slug and category intent matches", () => {
+    const slugExact = entry({
+      category: "mcp",
+      slug: "browser-bridge",
+      title: "Bridge",
+      description: "Utility bridge.",
+    });
+    const categoryOnly = entry({
+      category: "mcp",
+      slug: "helper-tool",
+      title: "Helper Tool",
+      description: "A helper in the MCP category.",
+    });
+    const weakMention = entry({
+      category: "commands",
+      slug: "notes",
+      title: "Notes",
+      description: "Mentions mcp browser bridge in passing.",
+    });
+
+    const ranked = search({ q: "mcp", sort: "popular" }, [
+      weakMention,
+      categoryOnly,
+      slugExact,
+    ]);
+    expect(ranked.at(-1)?.slug).toBe("notes");
+    expect(new Set(ranked.slice(0, 2).map((item) => item.slug))).toEqual(
+      new Set(["browser-bridge", "helper-tool"]),
+    );
+  });
+
+  it("uses author and submitted-by fields in relevance scoring", () => {
+    const submittedByMatch = entry({
+      slug: "submission-helper",
+      title: "Submission Helper",
+      submittedBy: "kiannidev",
+    });
+    const bodyMention = entry({
+      slug: "body-mention",
+      title: "Body Mention",
+      description: "Created by kiannidev according to release notes.",
+    });
+
+    const ranked = search({ q: "kiannidev", sort: "popular" }, [
+      bodyMention,
+      submittedByMatch,
+    ]);
+    expect(ranked[0]?.slug).toBe("submission-helper");
+  });
+
+  it("preserves explicit newest and title sort modes", () => {
+    const zebra = entry({
+      slug: "zebra",
+      title: "Zebra Tool",
+      dateAdded: "2026-01-01",
+    });
+    const alpha = entry({
+      slug: "alpha",
+      title: "Alpha Tool",
+      dateAdded: "2026-02-01",
+    });
+
+    expect(
+      search({ q: "tool", sort: "newest" }, [zebra, alpha]).map(
+        (item) => item.slug,
+      ),
+    ).toEqual(["alpha", "zebra"]);
+    expect(
+      search({ q: "tool", sort: "title" }, [zebra, alpha]).map(
+        (item) => item.slug,
+      ),
+    ).toEqual(["alpha", "zebra"]);
   });
 });
