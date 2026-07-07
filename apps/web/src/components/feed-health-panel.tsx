@@ -1,6 +1,7 @@
 import * as React from "react";
 import { CheckCircle2, AlertTriangle, ExternalLink, Loader2 } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
+import { timeAgo } from "@/lib/format-lib";
 import { cn } from "@/lib/utils";
 
 interface FeedHealth {
@@ -18,18 +19,6 @@ interface HealthPayload {
   generatedAt: string;
   count: number;
   feeds: FeedHealth[];
-}
-
-function formatAgo(iso: string | null): string {
-  if (!iso) return "—";
-  const ms = Date.now() - new Date(iso).getTime();
-  const m = Math.round(ms / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.round(h / 24);
-  return `${d}d ago`;
 }
 
 export function FeedHealthPanel({ compact = false }: { compact?: boolean }) {
@@ -76,7 +65,7 @@ export function FeedHealthPanel({ compact = false }: { compact?: boolean }) {
         <div>
           <div className="font-display text-sm font-semibold text-ink">Feed health</div>
           <p className="text-xs text-ink-muted">
-            {current}/{total} feeds current · last checked {formatAgo(data.generatedAt)}
+            {current}/{total} feeds current · last checked {timeAgo(data.generatedAt)}
           </p>
         </div>
         <a
@@ -121,8 +110,8 @@ export function FeedHealthPanel({ compact = false }: { compact?: boolean }) {
               </a>
             </div>
             <div className="text-ink-muted">{f.itemCount} items</div>
-            <div className="text-ink-muted">latest {formatAgo(f.latestItemAt)}</div>
-            <div className="text-ink-muted">built {formatAgo(f.lastBuilt)}</div>
+            <div className="text-ink-muted">latest {timeAgo(f.latestItemAt)}</div>
+            <div className="text-ink-muted">built {timeAgo(f.lastBuilt)}</div>
             <div className="truncate font-mono text-ink-subtle" title={f.etag}>
               {f.etag.replace(/"/g, "")}
             </div>
