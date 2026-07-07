@@ -51,6 +51,13 @@ gate:
     mode: advisory           # block | advisory | off — readiness-score floor, advisory only
     minScore: 60
 
+# Review-evasion protection (config-as-code override; layered OVER the dashboard's own default of
+# "off"): closing or converting-to-draft your OWN PR while gittensory has an active review pass
+# running, a prior recorded gate failure, or a repeated ready<->draft cycle on this PR, is treated
+# as dodging the one-shot review rather than an ordinary action.
+settings:
+  reviewEvasionProtection: close
+
 publicNotes:
   - Content is PR-first — submit one source-backed entry per PR under content/<category>/.
   - Prefer free, source-backed, practical resources. Paid tools, commercial listings, jobs, and
