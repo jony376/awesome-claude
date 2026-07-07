@@ -1,6 +1,12 @@
 import { cache } from "react";
 
 import { getDirectoryEntries, type DirectoryEntry } from "@/lib/content.server";
+import { contributorSlug } from "@/lib/contributor-identity-lib";
+
+// `contributorSlug` is the canonical handle->slug normalizer and already lives
+// (unit-tested) in contributor-identity-lib. Re-export it here so existing
+// `@/lib/contributors` consumers keep working without a second, drifting copy.
+export { contributorSlug };
 
 export type ContributorSummary = {
   slug: string;
@@ -9,15 +15,6 @@ export type ContributorSummary = {
   entryCount: number;
   entries: DirectoryEntry[];
 };
-
-export function contributorSlug(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/^@/, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 export const getContributors = cache(async () => {
   const entries = await getDirectoryEntries();
