@@ -2,6 +2,7 @@ import * as React from "react";
 import { BadgeCheck } from "lucide-react";
 
 import { CountUp } from "@/components/count-up";
+import { distBarWidths } from "@/lib/data-report-bars-lib";
 
 /** A single labelled distribution row: a count and its share of the relevant total. */
 export interface DistRow {
@@ -65,20 +66,17 @@ export function DataSection({
 
 /** Horizontal-bar distribution table; bars are scaled to the largest row. */
 export function DistTable({ rows }: { rows: DistRow[] }) {
-  const max = rows.reduce((m, r) => Math.max(m, r.count), 0);
+  const widths = distBarWidths(rows);
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-surface">
-      {rows.map((row) => (
+      {rows.map((row, i) => (
         <div
           key={row.label}
           className="grid grid-cols-[160px_1fr_56px_56px] items-center gap-4 border-b border-border px-5 py-3 last:border-0"
         >
           <div className="font-display text-sm font-semibold text-ink">{row.label}</div>
           <div className="h-2 overflow-hidden rounded-full bg-surface-2">
-            <div
-              className="h-full bg-ink"
-              style={{ width: `${max ? Math.round((row.count / max) * 100) : 0}%` }}
-            />
+            <div className="h-full bg-ink" style={{ width: `${widths[i]}%` }} />
           </div>
           <div className="text-right font-mono text-xs tabular-nums text-ink">{row.count}</div>
           <div className="text-right font-mono text-xs tabular-nums text-ink-subtle">
