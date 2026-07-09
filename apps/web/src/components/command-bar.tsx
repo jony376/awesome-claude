@@ -21,6 +21,7 @@ import { CategoryPill, Kbd, TrustBadge } from "./badges";
 import { useTheme } from "@/lib/theme";
 import { useShortcuts } from "./shortcuts-dialog";
 import { cn } from "@/lib/utils";
+import { filterCommandActions } from "@/lib/command-bar-actions-lib";
 import { trackEvent } from "@/lib/analytics";
 
 const EXAMPLES = [
@@ -66,9 +67,9 @@ export function CommandBar({
 
   // Lazy-load the in-memory search index (and the registry dataset it pulls in) only when the
   // bar is opened or typed into, so the ~1 MB dataset stays out of the universal client bundle.
-  const [searchFn, setSearchFn] = React.useState<
-    (typeof import("@/data/search"))["search"] | null
-  >(null);
+  const [searchFn, setSearchFn] = React.useState<(typeof import("@/data/search"))["search"] | null>(
+    null,
+  );
   React.useEffect(() => {
     if ((!open && !q) || searchFn) return;
     let cancelled = false;
@@ -169,9 +170,7 @@ export function CommandBar({
         run: () => shortcuts?.open(),
       },
     ];
-    if (!q.trim()) return all;
-    const needle = q.toLowerCase();
-    return all.filter((a) => a.label.toLowerCase().includes(needle)).slice(0, 4);
+    return filterCommandActions(all, q);
   }, [q, navigate, toggleTheme, shortcuts]);
 
   // Build a flat option list (results first, then actions) for keyboard nav.
