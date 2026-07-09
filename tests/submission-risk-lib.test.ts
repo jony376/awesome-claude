@@ -65,6 +65,11 @@ function validMcpMdx(overrides: Record<string, unknown> = {}) {
   return `---\n${lines.join("\n")}\n---\n\nUseful setup and usage notes.`;
 }
 
+function withoutGeneratedAt<T extends { generatedAt?: string }>(report: T) {
+  const { generatedAt: _generatedAt, ...rest } = report;
+  return rest;
+}
+
 describe("submission-risk-lib surface", () => {
   it("exposes stable schema metadata", () => {
     expect(SUBMISSION_RISK_SCHEMA_VERSION).toBe(1);
@@ -81,7 +86,9 @@ describe("submission-risk-lib surface", () => {
       draft,
       validation,
     );
-    expect(fromWrapper).toEqual(fromLib);
+    expect(withoutGeneratedAt(fromWrapper)).toEqual(
+      withoutGeneratedAt(fromLib),
+    );
   });
 });
 
@@ -475,8 +482,10 @@ describe("submission-risk-lib invariants", () => {
       },
       files: [sourceFile(validMcpMdx({ slug: "wrapper-parity-mcp" }))],
     };
-    expect(analyzeDirectContentRiskFromWrapper(input)).toEqual(
-      analyzeDirectContentRisk(input),
+    const fromLib = analyzeDirectContentRisk(input);
+    const fromWrapper = analyzeDirectContentRiskFromWrapper(input);
+    expect(withoutGeneratedAt(fromWrapper)).toEqual(
+      withoutGeneratedAt(fromLib),
     );
   });
 });
