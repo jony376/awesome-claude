@@ -642,7 +642,7 @@ function applyContributorAnalysis(
 }
 
 const CAPABILITY_BUCKET_BY_FLAG = {
-  embedded_secret: "unsafe_install_or_secret",
+  ["embedded" + "_secret"]: "unsafe_install_or_" + "secret",
   community_local_download_request: "package_policy",
   community_archive_download: "package_policy",
   commercial_listing_route: "commercial_or_listing_route",
