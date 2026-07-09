@@ -5,10 +5,16 @@ import {
   validateSubmission,
 } from "@heyclaude/registry/submission";
 import {
+  SUBMISSION_RISK_COMMENT_MARKER,
+  SUBMISSION_RISK_SCHEMA_VERSION,
   analyzeDirectContentRisk,
   analyzeSubmissionDraftRisk,
   directContentRequestChangesReasons,
   formatSubmissionRiskMarkdown,
+} from "../packages/registry/src/submission-risk-lib.js";
+import {
+  analyzeDirectContentRisk as analyzeDirectContentRiskFromWrapper,
+  analyzeSubmissionDraftRisk as analyzeSubmissionDraftRiskFromWrapper,
 } from "@heyclaude/registry/submission-risk";
 
 const dayMs = 86_400_000;
@@ -59,7 +65,27 @@ function validMcpMdx(overrides: Record<string, unknown> = {}) {
   return `---\n${lines.join("\n")}\n---\n\nUseful setup and usage notes.`;
 }
 
-describe("submission risk invariants", () => {
+describe("submission-risk-lib surface", () => {
+  it("exposes stable schema metadata", () => {
+    expect(SUBMISSION_RISK_SCHEMA_VERSION).toBe(1);
+    expect(SUBMISSION_RISK_COMMENT_MARKER).toBe(
+      "<!-- submission-risk-report -->",
+    );
+  });
+
+  it("keeps the public wrapper re-export aligned with the lib module", () => {
+    const draft = buildSubmissionPrDraft(validMcpFields);
+    const validation = validateSubmission(draft);
+    const fromLib = analyzeSubmissionDraftRisk(draft, validation);
+    const fromWrapper = analyzeSubmissionDraftRiskFromWrapper(
+      draft,
+      validation,
+    );
+    expect(fromWrapper).toEqual(fromLib);
+  });
+});
+
+describe("submission-risk-lib invariants", () => {
   it("keeps contributor reputation, source repository, and disclosure signals in draft risk reports", () => {
     const draft = {
       ...buildSubmissionPrDraft({
@@ -436,5 +462,21 @@ describe("submission risk invariants", () => {
     expect(markdown).toContain("### Blocking findings");
     expect(markdown).toContain("Capability buckets");
     expect(markdown).not.toMatch(/private reviewer|prompt|scoring threshold/i);
+  });
+
+  it("matches direct content analysis through the public wrapper export", () => {
+    const input = {
+      pullRequest: {
+        number: 556,
+        title: "content(mcp): add wrapper parity mcp",
+        user: { login: "contributor" },
+        head: { repo: { full_name: "contributor/awesome-claude" } },
+        base: { repo: { full_name: "JSONbored/awesome-claude" } },
+      },
+      files: [sourceFile(validMcpMdx({ slug: "wrapper-parity-mcp" }))],
+    };
+    expect(analyzeDirectContentRiskFromWrapper(input)).toEqual(
+      analyzeDirectContentRisk(input),
+    );
   });
 });
