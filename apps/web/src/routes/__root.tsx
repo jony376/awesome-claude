@@ -28,16 +28,10 @@ import { UmamiTracker } from "@/components/umami-tracker";
 import { siteConfig } from "@/lib/site";
 import { absoluteUrl } from "@/lib/seo";
 import { stringifyJsonLd } from "@/lib/json-ld";
+import { twitterHandleFrom } from "@/lib/twitter-handle-lib";
 import { buildOrganizationJsonLd, buildWebsiteJsonLd } from "@heyclaude/registry/seo";
 
-const twitterHandle = (() => {
-  try {
-    const handle = new URL(siteConfig.twitterUrl).pathname.split("/").filter(Boolean)[0];
-    return handle ? `@${handle.replace(/^@/, "")}` : undefined;
-  } catch {
-    return undefined;
-  }
-})();
+const twitterHandle = twitterHandleFrom(siteConfig.twitterUrl);
 
 // Sitewide default OG/Twitter card. Routes that render a page-specific card override og:image.
 const defaultOgImage = absoluteUrl("/og-image.png");
