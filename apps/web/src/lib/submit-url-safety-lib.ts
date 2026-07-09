@@ -1,6 +1,7 @@
 // Pure same-origin URL guards for the submit flow, split out of the route so the
-// origin allowlisting can be unit-tested. Both never throw and collapse unsafe
-// or cross-origin input to "".
+// origin allowlisting can be unit-tested. None of these throw, and they collapse
+// unsafe or cross-origin input to "" (or, for a nextAction, to `undefined`).
+// The siteConfig-backed URLs are default parameters so tests can inject them.
 
 import { siteConfig } from "@/lib/site";
 
@@ -40,4 +41,47 @@ export function safeUrlForOrigins(
   } catch {
     return "";
   }
+}
+
+/**
+ * A submission-gate status URL, accepted only when it lives on the gate's own
+ * origin. Anything else — missing, cross-origin, or an unset/unparseable gate
+ * URL (which allows no origins at all) — becomes "".
+ */
+export function safeGateStatusUrl(
+  value: string | undefined,
+  gateUrl = siteConfig.submissionGateUrl,
+): string {
+  const gateOrigin = originFor(gateUrl);
+  return safeUrlForOrigins(value, new Set(gateOrigin ? [gateOrigin] : []));
+}
+
+/** The part of a preflight response whose `nextAction` URL must stay same-origin. */
+export type WithNextAction = {
+  nextAction?: {
+    label: string;
+    url?: string;
+  };
+};
+
+/**
+ * Clamp a preflight response's `nextAction.url` to `siteUrl`'s own origin. The
+ * payload is returned untouched when it carries no `nextAction.url` (or the
+ * site origin is unparseable); otherwise a cross-origin or unsafe URL is
+ * dropped to `undefined` and a same-origin one is normalized.
+ */
+export function sanitizeNextActionUrl<T extends WithNextAction>(
+  payload: T,
+  siteUrl = siteConfig.url,
+): T {
+  const siteOrigin = originFor(siteUrl);
+  if (!payload.nextAction?.url || !siteOrigin) return payload;
+  const safeNextUrl = safeUrlForOrigins(payload.nextAction.url, new Set([siteOrigin]), siteUrl);
+  return {
+    ...payload,
+    nextAction: {
+      ...payload.nextAction,
+      ...(safeNextUrl ? { url: safeNextUrl } : { url: undefined }),
+    },
+  };
 }

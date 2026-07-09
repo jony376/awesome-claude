@@ -20,7 +20,7 @@ import {
 import { logClientError } from "@/lib/client-logs";
 import { safeGitHubAuthUrl } from "@/lib/github-auth-url-lib";
 import { siteConfig } from "@/lib/site";
-import { originFor, safeUrlForOrigins } from "@/lib/submit-url-safety-lib";
+import { safeGateStatusUrl, sanitizeNextActionUrl } from "@/lib/submit-url-safety-lib";
 import { CopyButton } from "@/components/copy-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
@@ -76,28 +76,6 @@ type PreflightResponse = {
     url?: string;
   };
 };
-
-function safeGateStatusUrl(value: string | undefined) {
-  const gateOrigin = originFor(siteConfig.submissionGateUrl);
-  return safeUrlForOrigins(value, new Set(gateOrigin ? [gateOrigin] : []));
-}
-
-function sanitizePreflightResponse(payload: PreflightResponse) {
-  const siteOrigin = originFor(siteConfig.url);
-  if (!payload.nextAction?.url || !siteOrigin) return payload;
-  const safeNextUrl = safeUrlForOrigins(
-    payload.nextAction.url,
-    new Set([siteOrigin]),
-    siteConfig.url,
-  );
-  return {
-    ...payload,
-    nextAction: {
-      ...payload.nextAction,
-      ...(safeNextUrl ? { url: safeNextUrl } : { url: undefined }),
-    },
-  };
-}
 
 type SubmitResult = {
   statusUrl?: string;
@@ -156,7 +134,7 @@ function SubmitPage() {
       if (!response.ok || !payload?.ok) {
         throw new Error("Server preflight failed. Retry before continuing to GitHub.");
       }
-      const safePayload = sanitizePreflightResponse(payload);
+      const safePayload = sanitizeNextActionUrl(payload);
       setPreflightResult(safePayload);
       return safePayload;
     } catch (error) {

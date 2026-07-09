@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   originFor,
+  safeGateStatusUrl,
   safeUrlForOrigins,
+  sanitizeNextActionUrl,
 } from "../apps/web/src/lib/submit-url-safety-lib";
 
 const BASE = "https://base.example";
+const GATE = "https://gate.example";
 
 describe("originFor", () => {
   it("returns the origin of a valid URL", () => {
@@ -60,5 +63,71 @@ describe("safeUrlForOrigins", () => {
 
   it("returns '' when the URL cannot be parsed (invalid base)", () => {
     expect(safeUrlForOrigins("x", new Set([BASE]), "")).toBe("");
+  });
+});
+
+describe("safeGateStatusUrl", () => {
+  it("accepts a status URL on the gate's own origin", () => {
+    expect(safeGateStatusUrl(`${GATE}/status/abc`, GATE)).toBe(
+      `${GATE}/status/abc`,
+    );
+  });
+
+  it("rejects a status URL on any other origin", () => {
+    expect(safeGateStatusUrl("https://evil.example/status/abc", GATE)).toBe("");
+  });
+
+  it("rejects everything when the gate URL is unset", () => {
+    expect(safeGateStatusUrl(`${GATE}/status/abc`, "")).toBe("");
+  });
+
+  it("returns '' for a missing status URL", () => {
+    expect(safeGateStatusUrl(undefined, GATE)).toBe("");
+  });
+});
+
+describe("sanitizeNextActionUrl", () => {
+  it("returns the payload untouched when there is no nextAction", () => {
+    const payload = { ok: true as const };
+    expect(sanitizeNextActionUrl(payload, BASE)).toBe(payload);
+  });
+
+  it("returns the payload untouched when nextAction has no url", () => {
+    const payload = { nextAction: { label: "Open" } };
+    expect(sanitizeNextActionUrl(payload, BASE)).toBe(payload);
+  });
+
+  it("keeps a same-origin nextAction url, normalized", () => {
+    const result = sanitizeNextActionUrl(
+      { nextAction: { label: "Open", url: "/pr/1" } },
+      BASE,
+    );
+    expect(result.nextAction).toEqual({ label: "Open", url: "/pr/1" });
+  });
+
+  it("drops a cross-origin nextAction url to undefined", () => {
+    const result = sanitizeNextActionUrl(
+      { nextAction: { label: "Open", url: "https://evil.example/x" } },
+      BASE,
+    );
+    expect(result.nextAction).toEqual({ label: "Open", url: undefined });
+  });
+
+  it("preserves the rest of the payload", () => {
+    const result = sanitizeNextActionUrl(
+      {
+        valid: true,
+        nextAction: { label: "Open", url: "https://evil.example/x" },
+      },
+      BASE,
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  it("returns the payload untouched when the site origin is unparseable", () => {
+    const payload = {
+      nextAction: { label: "Open", url: "https://evil.example/x" },
+    };
+    expect(sanitizeNextActionUrl(payload, "")).toBe(payload);
   });
 });
